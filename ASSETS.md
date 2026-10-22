@@ -28,8 +28,12 @@ All ten cats in `assets/cats/` have a set rendered in Blender by [tools/blender]
 | `land` | once | ~0.35 s | Soft landing squash, ending in `stand`. |
 | `bat` | once | ~0.5 s | Paw swipe at the yarn. |
 | `nuzzle` | loop | ~2 s | Head pushed forward and eyes closed, for greeting another cat. |
+| `attend` | once | ~0.8 s | Sits up tall and turns to face the camera, ears up. Played when the teacher pauses, and backwards on resume. |
+| `attendLoop` | loop | ~3 s | Sitting face-on, paying attention: breathing, a blink, a small head tilt. |
 
 Leaving is built from these clips, not one dedicated clip: `wake → yawn → alert → stretch → walk`. The tone is unbothered, never startled.
+
+**Toby** (the French bulldog, `assets/cats/toby/`) uses the same clip list. `felt_cat.py` builds him when the def has `species: 'dog'`, with a broad skull, jowls, a flat muzzle, a black nose, bat ears and no whiskers. `shapeFor()` in `catArt.js` gives him a stocky body and a stub tail in both the rig and the exported poses. He has no `knead` or `groom` in practice, because the behaviour code never asks a dog for them.
 
 ### How the game uses them
 

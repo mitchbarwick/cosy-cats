@@ -146,6 +146,18 @@ export const CLIPS = {
     p.body[3] *= 1 - 0.08 * (1 - u); p.haunch[3] *= 1 - 0.06 * (1 - u);
     return { p };
   } },
+  // Paused by the teacher: sit up tall and turn to face the room (played backwards to turn away)
+  attend: { frames: 20, frame(u) {
+    const e = ease(u);
+    const p = unflat(mix(pose('sit'), pose('attend'), e));
+    return { p, turn: 1 - e, yaw: -e * Math.PI / 2, earFlick: u < 0.4 ? u / 0.4 : 0, alert: e };
+  } },
+  attendLoop: { frames: 72, loop: true, frame(u) {
+    const p = unflat(pose('attend'));
+    breathe(p, Math.sin(u * TAU) * 0.02);
+    p.head[3] += Math.sin(u * TAU) * 0.05; // a slow, curious head tilt
+    return { p, turn: 0, yaw: -Math.PI / 2, alert: 1, blink: 1 - bump(u, 0.62, 0.69), lookX: Math.sin(u * TAU) * 0.08 };
+  } },
   bat: { frames: 12, frame(u) {
     const p = unflat(mix(pose('sit'), pose('bat'), ease(clamp(u / 0.4, 0, 1))));
     p.legs[2][2] += Math.sin(u * TAU) * 6; p.legs[2][3] += (Math.cos(u * TAU) - 1) * 5;

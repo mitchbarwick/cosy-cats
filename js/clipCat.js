@@ -15,11 +15,12 @@ const FALLBACK = {
   sniff: 'stand', groom: 'sit', yawn: 'sit', alert: 'sit', nuzzle: 'sit', bat: 'sit', wake: 'loaf',
   knead: 'loaf', stretch: 'stand', crouch: 'stand', jump: 'stand', land: 'stand',
   turn: null, circle: null, settle: null,
+  attendLoop: 'sit', attend: null,
 };
 const POSE_CLIP = {
   stand: 'stand', walk: 'walk', sniff: 'sniff', sit: 'sit', look: 'sit', groom: 'groom', yawn: 'yawn',
   loaf: 'loaf', sleep: 'sleepLoop', wake: 'wake', nuzzle: 'nuzzle', alert: 'alert', stretch: 'stretch',
-  knead: 'knead', crouch: 'crouch', bat: 'bat', jump: 'jump',
+  knead: 'knead', crouch: 'crouch', bat: 'bat', jump: 'jump', attend: 'attendLoop',
 };
 // In-between clips played when one clip follows another. `from` is where to start (a fraction
 // of the clip, or 'here' for where the outgoing clip is); `reverse` steps it backwards, so
@@ -197,7 +198,10 @@ export class ClipCatRenderer {
       // let the bridge play out
       if (!(at === this.cur && this.ended(at))) ({ clip: next, from, reverse, bridgeTo } = at);
     } else if (at && at.clip !== next) {
-      const b = BRIDGE[`${at.clip}>${next}`];
+      // paying attention: `attend` turns the animal to face the room on the way into the
+      // front-facing loop, and plays backwards to turn it away again afterwards
+      const b = BRIDGE[`${at.clip}>${next}`] ||
+        (next === 'attendLoop' ? { clip: 'attend' } : at.clip === 'attendLoop' ? { clip: 'attend', from: 1, reverse: true } : null);
       if (b && this.has(b.clip)) {
         bridgeTo = next; next = b.clip; fit = 0; reverse = !!b.reverse;
         from = b.from === 'here' ? at.v.currentTime : (b.from || 0) * this.set.dur[b.clip];

@@ -84,6 +84,7 @@ export class AudioEngine {
 
   meow(voice, vol = 0.6) {
     if (!this.ctx || !this.catSounds) return;
+    if (voice.dog) return this.snort(vol);
     const c = this.ctx;
     const t = c.currentTime + 0.02;
     const { pitch, len, bright } = voice;
@@ -138,6 +139,7 @@ export class AudioEngine {
 
   trill(voice) {
     if (!this.ctx || !this.catSounds) return;
+    if (voice.dog) return this.snort(0.8, 2);
     const c = this.ctx;
     const t = c.currentTime + 0.02;
     const d = 0.38;
@@ -167,6 +169,7 @@ export class AudioEngine {
 
   purr(voice, dur = 4) {
     if (!this.ctx || !this.catSounds) return;
+    if (voice.dog) return this.snore(dur);
     const c = this.ctx;
     const t = c.currentTime + 0.02;
     this.hold(dur);
@@ -202,6 +205,71 @@ export class AudioEngine {
     src.connect(lp).connect(rumble).connect(env).connect(this.master);
     src.start(t); lfo.start(t);
     src.stop(t + dur + 0.2); lfo.stop(t + dur + 0.2);
+  }
+
+  // Toby's hello: one or two soft, snuffly French-bulldog snorts.
+  snort(vol = 0.6, count = 1 + Math.floor(Math.random() * 2)) {
+    const c = this.ctx;
+    let t = c.currentTime + 0.02;
+    for (let i = 0; i < count; i++) {
+      const d = 0.16 + Math.random() * 0.08;
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(520, t);
+      bp.frequency.linearRampToValueAtTime(320, t + d);
+      bp.Q.value = 3;
+      const grunt = c.createOscillator();
+      grunt.type = 'sawtooth';
+      grunt.frequency.setValueAtTime(115, t);
+      grunt.frequency.linearRampToValueAtTime(85, t + d);
+      const glp = c.createBiquadFilter();
+      glp.type = 'lowpass'; glp.frequency.value = 600;
+      const gg = c.createGain();
+      gg.gain.value = 0.35;
+      const env = c.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.16 * vol, t + 0.02);
+      env.gain.exponentialRampToValueAtTime(0.001, t + d);
+      src.connect(bp).connect(env);
+      grunt.connect(glp).connect(gg).connect(env);
+      env.connect(this.sfxBus);
+      src.start(t, Math.random()); src.stop(t + d + 0.05);
+      grunt.start(t); grunt.stop(t + d + 0.05);
+      t += d + 0.09;
+    }
+    this.hold(t - c.currentTime);
+  }
+
+  // Toby asleep: slow, quiet, rumbly snores.
+  snore(dur = 4) {
+    const c = this.ctx;
+    const t0 = c.currentTime + 0.02;
+    const breaths = Math.max(1, Math.round(dur / 2.4));
+    this.hold(dur);
+    for (let i = 0; i < breaths; i++) {
+      const t = t0 + i * 2.4;
+      const d = 1.1;
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 420; lp.Q.value = 4;
+      const rattle = c.createGain();
+      const lfo = c.createOscillator();
+      lfo.frequency.value = 32;
+      const lfoG = c.createGain();
+      lfoG.gain.value = 0.6;
+      rattle.gain.value = 0.4;
+      lfo.connect(lfoG).connect(rattle.gain);
+      const env = c.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.09, t + d * 0.6);
+      env.gain.linearRampToValueAtTime(0, t + d);
+      src.connect(lp).connect(rattle).connect(env).connect(this.master);
+      src.start(t, Math.random()); src.stop(t + d + 0.05);
+      lfo.start(t); lfo.stop(t + d + 0.05);
+    }
   }
 
   thump() {

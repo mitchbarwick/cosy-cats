@@ -4,7 +4,7 @@
 // procedural rig can later be swapped for pre-rendered video clips (see ASSETS.md).
 import { lerp, clamp, rand, pick, softShadow, noise1, rr, makeCanvas } from './util.js';
 import { SPOTS, FLOOR_LANE, VIEW, floorScale } from './scene.js';
-import { CAT_DEFS, POSE_FLAT, unflat, drawCat, applyTurn } from './catArt.js';
+import { CAT_DEFS, TOBY, ANIMAL_DEFS, POSE_FLAT, unflat, drawCat, applyTurn, shapeFor } from './catArt.js';
 import { ClipCatRenderer, preloadClipSets } from './clipCat.js';
 
 export const CAT_SCALE = 1.2;          // cats read clearly from the back of a classroom
@@ -18,6 +18,10 @@ const REACH = 100;     // cat units from the feet to the nose or tail tip, side-
 const SPR = { l: 170, t: 240, w: 340, h: 280 }; // sprite box in cat-local units (origin at feet)
 
 const isFloorSpot = (s) => s.route.length === 1;
+const isDog = (def) => def.species === 'dog';
+// dogs only use dog spots, cats never do
+const spotFits = (s, def) => !!s.dog === isDog(def);
+const RECALL_WINDOW = 30; // s the undo button offers to bring a departed cat back
 // Floor x just out of sight on one side (-1 left, 1 right) for a cat walking at row y.
 const offstageX = (def, side, y) => {
   const reach = REACH * floorScale(y) * def.size * CAT_SCALE + EXIT_PAD;
@@ -72,6 +76,7 @@ class Cat {
     this.label = 0;
     this.age = 0;
     this.busy = null;
+    this.attending = false; this.front = 0; // paused: sitting up, facing the room
   }
 
   // --- action queue ----------------------------------------------------------
@@ -154,7 +159,8 @@ class Cat {
       this.clip = 'knead';
       if (Math.random() < 0.7) this.world.sfx?.purr(this.def.voice, 3.5);
     });
-    this.hold(rand(2.2, 3.2), 'knead', 'knead');
+    if (isDog(this.def)) this.hold(rand(1.2, 1.8), 'sniff', 'sniff'); // dogs circle and flop, no kneading
+    else this.hold(rand(2.2, 3.2), 'knead', 'knead');
     this.hold(1.4, 'loaf');
     this.call(() => {
       this.settledAt = this.world.time;
@@ -206,7 +212,7 @@ class Cat {
     }
     if ((from === 'loaf' || from === 'wake') && !this.world.alert && isCosySpot(spot) &&
       this.world.time - this.settledAt > this.resettleAfter) return this.resettle();
-    const options = (NEXT[from] || ['sit']).filter((p) => ALWAYS_OK.has(p) || spot.poses.includes(p));
+    const options = (NEXT[from] || ['sit']).filter((p) => (ALWAYS_OK.has(p) || spot.poses.includes(p)) && !(p === 'groom' && isDog(this.def)));
     this.setActivity(pick(options.length ? options : ['sit']));
   }
 
@@ -280,6 +286,7 @@ class Cat {
     for (const c of w.cats) if (c.busy === this) { c.busy = null; c.setActivity('sit'); }
     if (this.busy) this.busy = null;
     const settled = this.state === 'resting' || this.state === 'settling';
+    w.departed.push({ cat: this, def: this.def, spot: this.spot, at: w.time });
     this.state = 'leaving';
     this.clip = 'leave';
     this.label = 0;
@@ -309,6 +316,30 @@ class Cat {
     });
   }
 
+  // Undo: a cat on its way out turns round and goes back (to its old spot if it's still free).
+  comeBack() {
+    const w = this.world;
+    const old = this.spot;
+    this.state = 'arriving';
+    this.clip = 'enter';
+    this.arrived = false; // name tag and a hello again
+    if (!(this.seg && this.seg.type === 'jump')) this.seg = null;
+    this.queue = [];
+    this.call(() => {
+      const target = old && !old.taken ? old : w.pickSpot(this.def);
+      if (!target) { this.exit(); return; }
+      if (target === old && Math.hypot(this.x - old.x, this.y - old.y) < 20) {
+        // never got down: just settle again where it was
+        this.spot = old; old.taken = this;
+        this.settleRoutine();
+        return;
+      }
+      if (old && this.y < 870) this.jumpTo({ x: old.route[0].x, y: old.route[0].y }, floorScale(old.route[0].y));
+      target.taken = this;
+      this.call(() => this.goToSpot(target));
+    });
+  }
+
   exit() {
     const toLeft = this.x < VIEW_MID;
     const lane = FLOOR_LANE + rand(-6, 10);
@@ -334,9 +365,30 @@ class Cat {
     this.age += dt;
     if (this.label > 0) this.label -= dt;
 
-    if (!this.seg && this.queue.length) this.startSeg(this.queue.shift());
+    // Paused by the teacher: whatever it was doing waits; the animal sits up and faces the room.
+    // A jump in flight lands first.
+    const midJump = this.seg && this.seg.type === 'jump';
+    if (w.paused && !midJump) {
+      if (!this.attending) {
+        this.attending = true;
+        this.prePose = this.poseName;
+        this.pausedAt = w.time;
+        if (this.seg && this.seg.type === 'walk') this.seg.v = 0;
+        this.flick();
+      }
+      this.poseName = 'attend';
+    } else if (this.attending && !w.paused) {
+      this.attending = false;
+      this.poseName = this.seg && this.seg.type === 'wait' && this.seg.pose ? this.seg.pose : this.prePose;
+      this.restUntil += w.time - this.pausedAt;
+      this.flick();
+    }
+    this.front = lerp(this.front, this.attending ? 1 : 0, 1 - Math.exp(-dt * 4));
+
+    if (!this.attending && !this.seg && this.queue.length) this.startSeg(this.queue.shift());
     let speed = 0;
-    if (this.seg) speed = this.runSeg(dt);
+    if (this.attending) { /* everything waits */ }
+    else if (this.seg) speed = this.runSeg(dt);
     else if (this.state === 'resting' && !this.busy && !this.alerted && w.time > this.restUntil) this.nextActivity();
 
     // React to a noisy room: look up, but settle back down once it's quiet again.
@@ -357,7 +409,7 @@ class Cat {
     } else if (this.state !== 'resting') {
       this.alerted = false;
     }
-    this.alertAmt = lerp(this.alertAmt, this.alerted || this.poseName === 'alert' ? 1 : 0, 1 - Math.exp(-dt * 6));
+    this.alertAmt = lerp(this.alertAmt, this.alerted || this.attending || this.poseName === 'alert' ? 1 : 0, 1 - Math.exp(-dt * 6));
 
     // pose smoothing (procedural walk cycle is layered on top in draw)
     this.walkAmt = lerp(this.walkAmt, clamp(speed / 25, 0, 1), 1 - Math.exp(-dt * 10));
@@ -382,12 +434,13 @@ class Cat {
     this.nextLook -= dt;
     if (this.nextLook < 0) {
       this.lookTarget = this.poseName === 'look' || this.poseName === 'sit' ? rand(-0.9, 0.5) : rand(-0.3, 0.2);
+      if (this.attending) this.lookTarget = rand(-0.12, 0.12); // eyes on the teacher
       if (Math.random() < 0.4) this.lookTarget = 0;
       this.nextLook = rand(2.5, 7);
     }
     this.lookX = lerp(this.lookX, this.lookTarget, 1 - Math.exp(-dt * 2.5));
 
-    if (this.state === 'resting') {
+    if (this.state === 'resting' && !this.attending) {
       this.nextSound -= dt;
       if (this.nextSound < 0) {
         this.nextSound = rand(50, 120);
@@ -484,7 +537,7 @@ class Cat {
 
   // --- draw ------------------------------------------------------------------
   posed(t) {
-    const p = unflat(this.cur);
+    const p = shapeFor(this.def, unflat(this.cur));
     const sleepy = this.poseName === 'sleep';
     const breathe = Math.sin(t * (sleepy ? 1.3 : 2.1) + this.def.name.length) * (sleepy ? 0.03 : 0.02);
     p.body[3] *= 1 + breathe;
@@ -527,7 +580,9 @@ class Cat {
       default: break;
     }
     if (this.wiggle) p.haunch[0] += Math.sin(t * 16) * 3;
-    return applyTurn(p, this.dirVis);
+    if (this.attending) p.head[3] += Math.sin(t * 0.4 + this.age) * 0.05; // the odd curious head tilt
+    // face the room while paying attention: the rig's turn pulled toward face-on
+    return applyTurn(p, this.dirVis * (1 - this.front));
   }
 
   draw(ctx, t) {
@@ -577,7 +632,7 @@ class Cat {
       drawCat(g, this.def, p, {
         t,
         blink: this.blinkT > 0 ? 0 : 1,
-        lookX: this.state === 'resting' && !this.alerted ? this.lookX : 0,
+        lookX: (this.state === 'resting' && !this.alerted) || this.attending ? this.lookX : 0,
         earFlick: this.flickT >= 0 ? this.flickT : 0,
         alert: this.alertAmt,
       });
@@ -630,29 +685,47 @@ export class CatWorld {
     this.particles = [];
     this.yarnUser = null;
     this.alert = false;
+    this.paused = false;
+    this.departed = []; // recent leavers, newest last, for the undo button
     this.pixelScale = 1;
     this.onChange = () => {};
-    this.clipsReady = preloadClipSets(CAT_DEFS);
+    this.clipsReady = preloadClipSets(ANIMAL_DEFS);
   }
 
   get count() { return this.cats.filter((c) => c.state !== 'leaving').length; }
-  get capacity() { return Math.min(SPOTS.length, CAT_DEFS.length); }
+  // ten cats, then Toby
+  get capacity() { return Math.min(SPOTS.filter((s) => !s.dog).length, CAT_DEFS.length) + 1; }
+  get toby() { return this.cats.find((c) => isDog(c.def) && c.state !== 'leaving'); }
+  get catCount() { return this.cats.filter((c) => !isDog(c.def) && c.state !== 'leaving').length; }
   yarnFree() { return !this.yarnUser; }
-  freeSpots() { return SPOTS.filter((s) => !s.taken); }
+  freeSpots(def = CAT_DEFS[0]) { return SPOTS.filter((s) => !s.taken && spotFits(s, def)); }
 
-  addCat() {
+  // spread animals out: favour spots far from the others so each one is easy to count
+  pickSpot(def) {
+    const spots = this.freeSpots(def);
+    if (!spots.length) return null;
+    const score = (s) => Math.min(...this.cats.filter((c) => c.spot && c.state !== 'leaving').map((c) => Math.hypot(c.spot.x - s.x, c.spot.y - s.y)), 2000);
+    return spots.map((s) => ({ s, v: score(s) + rand(0, 400) + (isFloorSpot(s) ? 0 : 150) })).sort((a, b) => b.v - a.v)[0].s;
+  }
+
+  // Next visitor: a cat who isn't here yet, or Toby once every cat has come. `want` forces one
+  // (the undo button), with `prefer` as the spot to go back to if it's still free.
+  addCat(want = null, prefer = null) {
     if (this.count >= this.capacity) return null;
     const present = new Set(this.cats.map((c) => c.def.name));
-    const defs = CAT_DEFS.filter((d) => !present.has(d.name));
-    const spots = this.freeSpots();
-    if (!defs.length || !spots.length) return null;
-    // prefer a cat whose clips have arrived, so early visitors don't have to wait off-stage
-    const ready = defs.filter((d) => !ClipCatRenderer.loading(d));
-    const def = pick(ready.length ? ready : defs);
-    // spread cats out: favour spots far from other cats so each one is easy to count
-    const score = (s) => Math.min(...this.cats.filter((c) => c.spot && c.state !== 'leaving').map((c) => Math.hypot(c.spot.x - s.x, c.spot.y - s.y)), 2000);
-    const ranked = spots.map((s) => ({ s, v: score(s) + rand(0, 400) + (isFloorSpot(s) ? 0 : 150) })).sort((a, b) => b.v - a.v);
-    const spot = ranked[0].s;
+    let def = want;
+    if (!def) {
+      const defs = CAT_DEFS.filter((d) => !present.has(d.name));
+      if (defs.length) {
+        // prefer a cat whose clips have arrived, so early visitors don't have to wait off-stage
+        const ready = defs.filter((d) => !ClipCatRenderer.loading(d));
+        def = pick(ready.length ? ready : defs);
+      } else if (!present.has(TOBY.name)) def = TOBY;
+      else return null;
+    }
+    if (present.has(def.name)) return null;
+    const spot = prefer && !prefer.taken && spotFits(prefer, def) ? prefer : this.pickSpot(def);
+    if (!spot) return null;
     const cat = new Cat(def, this);
     cat.clips = ClipCatRenderer.for(def); // pre-rendered clips when this cat has them, else the rig
     // over a slow connection its clips may still be downloading: it waits off-stage for them
@@ -671,6 +744,24 @@ export class CatWorld {
     return cat;
   }
 
+  // Undo the latest departure: a leaver still in view turns back, one already gone walks in again.
+  recall() {
+    this.departed = this.departed.filter((d) => this.time - d.at < RECALL_WINDOW);
+    const d = this.departed.pop();
+    if (!d) return null;
+    const cat = this.cats.find((c) => c === d.cat && c.state === 'leaving');
+    if (cat) cat.comeBack();
+    else this.addCat(d.def, d.spot);
+    this.onChange();
+    return d.def;
+  }
+
+  // the most recent departure the undo button can still bring back
+  get recallable() {
+    const d = this.departed[this.departed.length - 1];
+    return d && this.time - d.at < RECALL_WINDOW ? d.def : null;
+  }
+
   removeCat() {
     const candidates = this.cats.filter((c) => c.state !== 'leaving');
     if (!candidates.length) return null;
@@ -684,7 +775,7 @@ export class CatWorld {
   }
 
   relocate(cat) {
-    const spots = this.freeSpots();
+    const spots = this.freeSpots(cat.def);
     if (!spots.length) return false;
     const target = pick(spots);
     const old = cat.spot;

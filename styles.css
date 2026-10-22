@@ -101,6 +101,25 @@ button.ghost { background: transparent; box-shadow: none; text-decoration: under
   z-index: 5;
 }
 
+#pauseBtn { padding: 9px 18px; font-size: 16px; white-space: nowrap; }
+#pauseBtn.on { background: var(--accent); color: #fff; }
+#hud.paused #noiseWrap { opacity: 0.45; }
+
+#undo, #pausedBanner {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  border-radius: 999px;
+  background: rgba(255, 246, 230, 0.92);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+#undo { bottom: calc(2.2vh + 82px); display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 20px; font-size: 17px; }
+#undo button { font-size: 16px; padding: 8px 18px; }
+#pausedBanner { top: 22px; padding: 10px 26px; font-size: 22px; font-weight: 600; color: var(--accent-dark); }
+#undo.hidden, #pausedBanner.hidden { opacity: 0; transform: translate(-50%, 8px); pointer-events: none; }
+
 #catCount { font-size: 20px; font-weight: 600; white-space: nowrap; min-width: 150px; }
 #catCount .paw { font-size: 18px; }
 #catCountLabel { font-weight: 400; font-size: 16px; opacity: 0.8; }

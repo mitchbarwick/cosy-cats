@@ -40,6 +40,8 @@ export const SPOTS = [
   { id: 'hearth', x: 1712, y: 940, poses: ['sleep', 'loaf', 'sit'], facing: -1, route: [{ x: 1712, y: 940 }] },
   { id: 'rugA', x: 830, y: 925, poses: ['sit', 'loaf', 'groom', 'sleep', 'play'], facing: 1, route: [{ x: 830, y: 925 }] },
   { id: 'rugB', x: 1150, y: 950, poses: ['sit', 'loaf', 'sleep', 'groom', 'play'], facing: -1, route: [{ x: 1150, y: 950 }] },
+  // Toby's place: flopped on the back of the rug between the cats (dogs only)
+  { id: 'dogRug', x: 992, y: 900, poses: ['sleep', 'loaf', 'sit'], facing: -1, dog: true, route: [{ x: 992, y: 900 }] },
 ];
 
 // How strongly a layer at depth z follows the slow camera drift (parallax).

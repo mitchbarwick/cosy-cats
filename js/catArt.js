@@ -28,6 +28,29 @@ export const CAT_DEFS = [
     acc: { type: 'collar', color: '#f19aac', flower: true }, size: 1.0, voice: { pitch: 640, len: 0.6, bright: 1.05 } },
 ];
 
+// Toby, a white French bulldog: the last visitor, who only comes once every cat is here.
+export const TOBY = {
+  name: 'Toby', species: 'dog', fur: '#f7f3ec', belly: '#ffffff', pattern: 'solid', eye: '#4a3328',
+  acc: { type: 'collar', color: '#4f72a0' }, size: 1.12, voice: { dog: true, pitch: 150, len: 0.4, bright: 1 },
+};
+export const ANIMAL_DEFS = [...CAT_DEFS, TOBY];
+
+// Per-animal changes to a pose: a French bulldog is stockier, with thick legs and a stub of a
+// tail. Shared by the live rig and the Blender exporter so both draw the same animal.
+export function shapeFor(def, p) {
+  if (def.species !== 'dog') return p;
+  p.chest[2] *= 1.1; p.chest[3] *= 1.04;
+  p.body[3] *= 1.06; p.haunch[2] *= 1.05;
+  for (const l of p.legs) l[4] *= 1.32;
+  for (const i of [0, 2]) { p.legs[i][0] += 6; p.legs[i][2] += 9; } // front legs set forward, under a broad chest
+  p.head[2] *= 1.06;
+  const [bx, by] = p.tail;
+  for (const i of [2, 4, 6]) { p.tail[i] = bx + (p.tail[i] - bx) * 0.13; p.tail[i + 1] = by + (p.tail[i + 1] - by) * 0.13; }
+  p.tail[8] *= 1.6;
+  p.tail[9] = 0;
+  return p;
+}
+
 // ---------------------------------------------------------------------------
 // Poses
 // legs: [hipX, hipY, footX, footY, width, visible] in order FF, BF, FN, BN (far/near)
@@ -103,6 +126,8 @@ P.alert = clonePose(P.sit, (p) => { p.head = [18, -114, 35, -0.08]; p.face = [0.
 P.yawn = clonePose(P.sit, (p) => { p.head = [14, -110, 35, -0.18]; p.face = [0.2, 0, 1]; });
 // lying down but awake, eyes sleepy
 P.wake = clonePose(P.loaf, (p) => { p.head = [42, -60, 33, 0.08]; p.face = [0.3, 0.5]; });
+// sitting up tall, eyes front: paying attention while the teacher talks (drawn face-on)
+P.attend = clonePose(P.sit, (p) => { p.head = [14, -114, 35, 0]; p.face = [0, 1]; });
 
 function clonePose(src, fn) {
   const p = JSON.parse(JSON.stringify(src));
@@ -169,9 +194,16 @@ function bodyPath(ctx, p) {
   ell(ctx, p.chest[0], p.chest[1], p.chest[2], p.chest[3]);
 }
 
-function headPath(ctx, p, fluffy) {
+function headPath(ctx, p, fluffy, dog) {
   const [hx, hy, r] = p.head;
   ctx.beginPath();
+  if (dog) {
+    // broad square skull with heavy jowls
+    ell(ctx, hx, hy - r * 0.06, r * 1.12, r * 0.9);
+    ell(ctx, hx - r * 0.44, hy + r * 0.34, r * 0.58, r * 0.46);
+    ell(ctx, hx + r * 0.44, hy + r * 0.34, r * 0.58, r * 0.46);
+    return;
+  }
   ell(ctx, hx, hy - r * 0.04, r * 1.08, r * 0.9);
   ell(ctx, hx - r * 0.52, hy + r * 0.26, r * 0.58, r * 0.48);
   ell(ctx, hx + r * 0.52, hy + r * 0.26, r * 0.58, r * 0.48);
@@ -460,7 +492,24 @@ function drawHead(ctx, def, p, o) {
   // ear flick: the near ear snaps sideways and back; alert: both ears up and forward
   const flick = Math.sin(clamp(o.earFlick || 0, 0, 1) * Math.PI);
   const perk = o.alert || 0;
-  for (const s of [-1, 1]) {
+  const dog = def.species === 'dog';
+  if (dog) {
+    // big upright bat ears with rounded tips
+    for (const s of [-1, 1]) {
+      const ex = hx + earShift + s * r * 0.7;
+      const ey = hy - r * (0.9 + perk * 0.05);
+      const rot = s * (0.34 - perk * 0.1) + (s > 0 ? flick * 0.45 : 0);
+      ctx.save();
+      ctx.translate(ex, ey); ctx.rotate(rot);
+      ctx.beginPath(); ctx.ellipse(0, 0, r * 0.42, r * 0.5, 0, 0, Math.PI * 2);
+      fuzzyEdge(ctx, o.outline, o.ow);
+      ctx.fillStyle = fur; ctx.fill();
+      ctx.fillStyle = 'rgba(240,165,165,0.9)';
+      ctx.beginPath(); ctx.ellipse(0, r * 0.06, r * 0.26, r * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+  for (const s of dog ? [] : [-1, 1]) {
     const bx = hx + earShift + s * r * 0.56;
     const by = hy - r * 0.5;
     const tx = hx + earShift * 1.4 + s * r * (0.86 - perk * 0.08) + (s > 0 ? flick * r * 0.3 : 0);
@@ -487,13 +536,13 @@ function drawHead(ctx, def, p, o) {
   }
 
   // head shape
-  headPath(ctx, p, o.long);
+  headPath(ctx, p, o.long, dog);
   fuzzyEdge(ctx, o.outline, o.ow);
   ctx.fillStyle = fur;
   ctx.fill();
 
   ctx.save();
-  headPath(ctx, p, o.long);
+  headPath(ctx, p, o.long, dog);
   ctx.clip();
   // markings
   switch (def.pattern) {
@@ -561,8 +610,8 @@ function drawHead(ctx, def, p, o) {
   // face
   const dark = ['#2b2731', '#35303a', '#3d2c27'].includes(fur) && def.pattern !== 'tux';
   const eyeY = hy + r * 0.06;
-  const spread = r * 0.4 * (1 - Math.abs(turn) * 0.18);
-  const eyeR = r * 0.2;
+  const spread = r * (dog ? 0.46 : 0.4) * (1 - Math.abs(turn) * 0.18);
+  const eyeR = r * (dog ? 0.19 : 0.2);
   for (const s of [-1, 1]) {
     const ex = fx + s * spread;
     const near = (s > 0) === (turn > 0) ? 1 + Math.abs(turn) * 0.12 : 1 - Math.abs(turn) * 0.12;
@@ -591,6 +640,11 @@ function drawHead(ctx, def, p, o) {
       ctx.arc(ex, eyeY - r * 0.04, eyeR * 0.75, Math.PI * 0.15, Math.PI * 0.85);
       ctx.stroke();
     }
+  }
+  if (dog) {
+    drawDogMuzzle(ctx, fx, hx, hy, r, turn, p.face[2] || 0);
+    ctx.restore();
+    return;
   }
   // blush
   ctx.fillStyle = dark ? 'rgba(230,120,140,0.28)' : 'rgba(240,130,130,0.35)';
@@ -636,6 +690,60 @@ function drawHead(ctx, def, p, o) {
     }
   }
   ctx.restore();
+}
+
+// French bulldog face below the eyes: a flat wide muzzle, black nose, droopy lips and a brow wrinkle.
+function drawDogMuzzle(ctx, fx, hx, hy, r, turn, mouth) {
+  // brow wrinkles between the eyes
+  ctx.strokeStyle = 'rgba(150,130,120,0.45)';
+  ctx.lineWidth = r * 0.04;
+  ctx.lineCap = 'round';
+  for (const k of [0, 1]) {
+    ctx.beginPath();
+    ctx.arc(fx, hy - r * (0.12 + k * 0.12), r * (0.16 + k * 0.04), Math.PI * 1.2, Math.PI * 1.8);
+    ctx.stroke();
+  }
+  // muzzle pad
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath(); ctx.ellipse(fx, hy + r * 0.44, r * 0.52, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(240,130,130,0.35)';
+  for (const s of [-1, 1]) {
+    ctx.beginPath(); ctx.ellipse(fx + s * r * 0.72, hy + r * 0.3, r * 0.18, r * 0.11, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // whisker freckles
+  ctx.fillStyle = 'rgba(120,100,95,0.4)';
+  for (const s of [-1, 1]) {
+    for (const [dx, dy] of [[0.22, 0.4], [0.32, 0.36], [0.28, 0.48]]) {
+      ctx.beginPath(); ctx.arc(fx + s * r * dx, hy + r * dy, r * 0.025, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  // big black nose
+  const ny = hy + r * 0.27;
+  ctx.fillStyle = '#2b2326';
+  ctx.beginPath();
+  ctx.moveTo(fx - r * 0.19, ny - r * 0.06);
+  ctx.quadraticCurveTo(fx, ny - r * 0.15, fx + r * 0.19, ny - r * 0.06);
+  ctx.quadraticCurveTo(fx + r * 0.16, ny + r * 0.1, fx, ny + r * 0.1);
+  ctx.quadraticCurveTo(fx - r * 0.16, ny + r * 0.1, fx - r * 0.19, ny - r * 0.06);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath(); ctx.ellipse(fx - r * 0.06, ny - r * 0.06, r * 0.05, r * 0.025, 0, 0, Math.PI * 2); ctx.fill();
+  if (mouth > 0.15) {
+    ctx.fillStyle = '#7a3a3e';
+    ctx.beginPath(); ctx.ellipse(fx, ny + r * 0.32, r * 0.2 * mouth + 1, r * 0.16 * mouth, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f0919a';
+    ctx.beginPath(); ctx.ellipse(fx, ny + r * 0.4, r * 0.12 * mouth, r * 0.07 * mouth, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // droopy lips
+  ctx.strokeStyle = 'rgba(60,45,45,0.7)';
+  ctx.lineWidth = r * 0.045;
+  ctx.beginPath();
+  ctx.moveTo(fx, ny + r * 0.1); ctx.lineTo(fx, ny + r * 0.2);
+  ctx.moveTo(fx - r * 0.36, ny + r * 0.18);
+  ctx.quadraticCurveTo(fx - r * 0.2, ny + r * 0.3, fx, ny + r * 0.2);
+  ctx.quadraticCurveTo(fx + r * 0.2, ny + r * 0.3, fx + r * 0.36, ny + r * 0.18);
+  ctx.stroke();
+  void hx; void turn;
 }
 
 function drawAccessory(ctx, def, p, outline) {

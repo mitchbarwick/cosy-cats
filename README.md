@@ -4,6 +4,13 @@ A quiet-classroom helper. A cosy night-time library is shown on screen. While th
 
 If the room gets noisy, nothing happens straight away. After a moment of steady noise, the cats look up and the bar says "The cats are listening…". If the noise carries on, the cat that has been there longest wakes, stretches and wanders off. It's never startled: the aim is that children want the cats back, not that they feel told off. A cough or a dropped pencil does nothing, and new cats only start arriving again once the room has been calm for a while.
 
+When all ten cats are in, one last visitor arrives: **Toby**, a white French bulldog, who flops on the rug and snorts and snores instead of meowing.
+
+## In class
+
+- **⏸ Pause** (or the Space bar): for giving an instruction. Nobody arrives or leaves, the music fades, and every animal sits up and turns to face the room until you press **▶ Resume**.
+- **↩ Bring back**: whenever an animal wanders off, a button above the bar offers to bring it back for 30 seconds. Use it if a cough or a door slam sent a cat home unfairly. If the cat is still walking out it turns round; if it's gone it walks back in to its old spot.
+
 ## Run it
 
 ```bash

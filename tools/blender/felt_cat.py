@@ -434,6 +434,8 @@ class FeltCat:
         pat = d['pattern']
         tabby = pat.startswith('tabby')
         self.long = long_ = pat in ('longhair', 'tabbyLong')
+        # Toby, the French bulldog: broad skull, jowls, flat muzzle, bat ears, no whiskers
+        self.dog = dog = d.get('species') == 'dog'
         self.dark = dark = lum(d['fur']) < 0.3
         fur, belly = d['fur'], d['belly']
         stripe = d.get('stripe') if tabby else None
@@ -492,10 +494,16 @@ class FeltCat:
             self.fluff, self.ffe = metaball('Fluff', fuzz('Fluff', fur, body_p, alpha=0.42), self.root, n_ell=3, n_ball=1)
 
         # head, built at radius 1 and scaled by the pose's head radius
-        self.skull = sphere('Skull', m_head, H, (0, 0, 0.04), (1.08, 0.95, 0.9))
+        sk = (1.14, 0.95, 0.88) if dog else (1.08, 0.95, 0.9)
+        self.skull = sphere('Skull', m_head, H, (0, 0, 0.04), sk)
         k = 1.12 if long_ else 1.037
-        sphere('SkullFuzz', m_headfuzz, H, (0, 0, 0.04), (1.08 * k, 0.95 * k + 0.005, 0.9 * k + 0.005))
+        sphere('SkullFuzz', m_headfuzz, H, (0, 0, 0.04), (sk[0] * k, sk[1] * k + 0.005, sk[2] * k + 0.005))
         for s in (-1, 1):
+            if dog:
+                # heavy jowls
+                sphere(f'Jowl{s}', m_head, H, (s * 0.44, -0.4, -0.36), (0.6, 0.5, 0.46))
+                sphere(f'JowlFuzz{s}', m_headfuzz, H, (s * 0.44, -0.4, -0.36), (0.62, 0.52, 0.48))
+                continue
             sphere(f'Cheek{s}', m_head, H, (s * 0.5, -0.32, -0.26), (0.56, 0.48, 0.44))
             if long_:
                 # fluffy cheek ruffs, as the rig's jagged head sides
@@ -504,22 +512,38 @@ class FeltCat:
                            (0.3, 0.16, 0.11), (0, s * (0.3 + 0.3 * j), 0), seg=24)
                     sphere(f'CheekTuftFuzz{s}{j}', m_headfuzz, H, (s * (0.95 + 0.05 * j), -0.22 + 0.06 * j, -0.1 - 0.17 * j),
                            (0.36, 0.2, 0.15), (0, s * (0.3 + 0.3 * j), 0), seg=24)
-        sphere('Muzzle', m_muzzle, H, (0, -0.74, -0.38), (0.44, 0.26, 0.28))
-        sphere('Chin', m_muzzle, H, (0, -0.62, -0.58), (0.3, 0.2, 0.16))
-        sphere('Nose', m_nose, H, (0, -0.99, -0.22), (0.12, 0.07, 0.075))
+        if dog:
+            sphere('Muzzle', m_muzzle, H, (0, -0.8, -0.38), (0.56, 0.24, 0.32))
+            sphere('Chin', m_muzzle, H, (0, -0.66, -0.62), (0.3, 0.18, 0.14))
+            m_dognose = flat_material('DogNose', '#2b2326', rough=0.35, coat=0.4)
+            sphere('Nose', m_dognose, H, (0, -1.02, -0.17), (0.21, 0.09, 0.12))
+            # brow wrinkles: two soft creases between the eyes
+            m_crease = flat_material('Crease', lighten(fur, -0.18), rough=1.0)
+            for j, (z, w) in enumerate(((0.22, 0.17), (0.34, 0.2))):
+                arc = []
+                for i in range(9):
+                    a = math.pi * (0.2 + 0.6 * i / 8)
+                    x, zz = w * math.cos(a), z + 0.05 * math.sin(a)
+                    arc.append((x, skull_y(x, zz, 0.02), zz))
+                poly_line(f'Crease{j}', m_crease, H, arc, 0.03)
+        else:
+            sphere('Muzzle', m_muzzle, H, (0, -0.74, -0.38), (0.44, 0.26, 0.28))
+            sphere('Chin', m_muzzle, H, (0, -0.62, -0.58), (0.3, 0.2, 0.16))
+            sphere('Nose', m_nose, H, (0, -0.99, -0.22), (0.12, 0.07, 0.075))
         self.mouth = sphere('Mouth', m_mouth, H, (0, -0.9, -0.5), (0.1, 0.06, 0.1))
         self.eyes, self.glints, self.lids = [], [], []
         for s in (-1, 1):
-            e = sphere(f'Eye{s}', m_eyes[s], H, (s * 0.38, -0.8, 0.06), (0.19, 0.1, 0.22), (0, 0, s * 0.35))
+            ex = 0.44 if dog else 0.38
+            e = sphere(f'Eye{s}', m_eyes[s], H, (s * ex, -0.8, 0.06), (0.19, 0.1, 0.22), (0, 0, s * 0.35))
             self.eyes.append(e)
-            g = sphere(f'Glint{s}', m_white, H, (s * 0.38 - 0.06, -0.9, 0.15), (0.055, 0.03, 0.055), seg=16)
+            g = sphere(f'Glint{s}', m_white, H, (s * ex - 0.06, -0.9, 0.15), (0.055, 0.03, 0.055), seg=16)
             self.glints.append(g)
             sphere(f'Blush{s}', m_blush, H, (s * 0.64, -0.64, -0.3), (0.17, 0.06, 0.1), (0, 0, s * 0.5), seg=24)
             # content closed eye: the rig's lower arc, laid on the skull
             arc = []
             for j in range(9):
                 a = math.pi * (0.15 + 0.7 * j / 8)
-                x, z = s * 0.38 + 0.16 * math.cos(a), 0.1 - 0.16 * math.sin(a)
+                x, z = s * ex + 0.16 * math.cos(a), 0.1 - 0.16 * math.sin(a)
                 arc.append((x, skull_y(x, z, 0.03), z))
             lid = poly_line(f'Lid{s}', m_lid, H, arc, 0.034)
             lid.hide_render = True
@@ -535,11 +559,17 @@ class FeltCat:
         self.ears = []
         for s in (-1, 1):
             piv = empty(f'Ear{s}', H)
-            piv.location = (s * 0.5, -0.05, 0.48)
-            cone(f'EarOuter{s}', ear_mats[s], piv, 0.4, 0.82, scale=(1, 0.5, 1))
-            cone(f'EarInner{s}', m_inner, piv, 0.25, 0.6, loc=(0, -0.13, 0.06), scale=(1, 0.3, 1))
+            if dog:
+                # big rounded bat ears standing up from the sides of the skull
+                piv.location = (s * 0.6, -0.02, 0.58)
+                sphere(f'EarOuter{s}', ear_mats[s], piv, (0, 0, 0.4), (0.5, 0.14, 0.56))
+                sphere(f'EarInner{s}', m_inner, piv, (0, -0.1, 0.42), (0.33, 0.05, 0.4))
+            else:
+                piv.location = (s * 0.5, -0.05, 0.48)
+                cone(f'EarOuter{s}', ear_mats[s], piv, 0.4, 0.82, scale=(1, 0.5, 1))
+                cone(f'EarInner{s}', m_inner, piv, 0.25, 0.6, loc=(0, -0.13, 0.06), scale=(1, 0.3, 1))
             self.ears.append((s, piv))
-        for s in (-1, 1):
+        for s in (() if dog else (-1, 1)):
             for k in range(3):
                 ob, sp = curve_line(f'Whisker{s}{k}', m_whisker, H, 0.012)
                 a, b = sp.bezier_points
@@ -812,7 +842,7 @@ class FeltCat:
         flick = math.sin(min(1, max(0, fr['earFlick'])) * math.pi)
         perk = fr['alert']
         for s, piv in self.ears:
-            out = 0.38 - perk * 0.14 + (flick * 0.55 if s > 0 else 0)   # tip away from the centre line
+            out = (0.62 if self.dog else 0.38) - perk * 0.14 + (flick * 0.55 if s > 0 else 0)   # tip away from the centre line
             fwd = -0.12 + perk * 0.22 - (flick * 0.35 if s > 0 else 0)     # + tips toward the face
             piv.rotation_euler = Euler((fwd, s * out, 0))
 

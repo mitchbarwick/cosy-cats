@@ -24,7 +24,15 @@
     </div>
 
     <!-- Noise bar -->
+    <!-- Undo: bring back the animal that just left -->
+    <div id="undo" class="hidden">
+      <span id="undoText">Biscuit wandered off</span>
+      <button id="undoBtn" class="primary">↩ Bring back</button>
+    </div>
+    <div id="pausedBanner" class="hidden">Paused · eyes on the teacher</div>
+
     <div id="hud">
+      <button id="pauseBtn" title="Pause (Space)"><span id="pauseIcon">⏸</span> <span id="pauseLabel">Pause</span></button>
       <div id="catCount"><span class="paw">🐾</span> <span id="catCountNum">0</span> <span id="catCountLabel">cats visiting</span></div>
       <div id="noiseWrap">
         <div id="noiseLabel">Library volume</div>

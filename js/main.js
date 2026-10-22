@@ -38,7 +38,7 @@ for (const key of ['music', 'catSounds', 'saver']) {
 function apply() {
   audio.sensitivity = settings.sens;
   audio.catSounds = settings.catSounds;
-  audio.setMusic(settings.music);
+  audio.setMusic(settings.music && !world.paused);
   $('noiseLimit').style.left = `${settings.limit * 100}%`;
 }
 apply();
@@ -46,6 +46,36 @@ apply();
 $('settingsToggle').addEventListener('click', () => $('settings').classList.toggle('hidden'));
 $('addCat').addEventListener('click', () => { audio.init(); world.addCat(); });
 $('removeCat').addEventListener('click', () => world.removeCat());
+
+// ---------------------------------------------------------------- pause + undo
+// Pause: noise rules stop and every animal sits up and faces the room until resumed.
+function setPaused(on) {
+  world.paused = on;
+  if (on) { world.alert = false; noise.state = 'calm'; noise.loud = 0; }
+  else noise.settle = Math.max(noise.settle, 4); // a moment to settle back before anyone new arrives
+  audio.setMusic(settings.music && !on);
+  $('pauseBtn').classList.toggle('on', on);
+  $('pauseIcon').textContent = on ? '▶' : '⏸';
+  $('pauseLabel').textContent = on ? 'Resume' : 'Pause';
+  $('pausedBanner').classList.toggle('hidden', !on);
+  hud.classList.toggle('paused', on);
+}
+$('pauseBtn').addEventListener('click', () => setPaused(!world.paused));
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' || e.target.closest('input, textarea')) return;
+  e.preventDefault();
+  if ($('intro').classList.contains('gone')) setPaused(!world.paused);
+});
+
+// Undo: the animal that just wandered off comes back, and the room gets a fresh start.
+$('undoBtn').addEventListener('click', () => {
+  if (!world.recall()) return;
+  noise.state = 'calm';
+  noise.loud = 0;
+  noise.cooldown = 8;
+  noise.leftMsg = 0;
+  world.alert = false;
+});
 $('fullscreenBtn').addEventListener('click', () => {
   if (document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen?.();
@@ -85,10 +115,12 @@ $('startNoMicBtn').addEventListener('click', () => start(false));
 // calm: after a short settle period, quiet time slowly fills the "next visitor" ring.
 // The band between the two thresholds holds the timers, so a cough or a dropped pencil does nothing.
 const LOOK_UP = 1.5;
+const hud = $('hud');
 const noise = { state: 'calm', loud: 0, quiet: 0, cooldown: 0, settle: 0, leftMsg: 0 };
 
 function updateNoise(dt) {
   const level = audio.readLevel(dt);
+  if (world.paused) return level; // nobody comes or goes during an instruction
   const hi = settings.limit;
   const lo = settings.limit * 0.8;
   const grace = Math.max(settings.grace, LOOK_UP + 1);
@@ -129,7 +161,6 @@ function updateNoise(dt) {
 }
 
 // ---------------------------------------------------------------- HUD
-const hud = $('hud');
 const fill = $('noiseFill');
 const status = $('noiseStatus');
 const arc = $('nextCatArc');
@@ -141,7 +172,8 @@ function updateHud(level) {
   hud.classList.toggle('loud', ratio > 1);
   hud.classList.toggle('restless', noise.state === 'restless');
   let msg;
-  if (!audio.micOn) msg = 'Mic off';
+  if (world.paused) msg = 'Paused';
+  else if (!audio.micOn) msg = 'Mic off';
   else if (noise.leftMsg > 0) msg = 'A cat wandered off for a nap';
   else if (noise.state === 'restless') msg = 'The cats are listening…';
   else if (ratio > 0.8) msg = 'Getting noisy…';
@@ -150,12 +182,18 @@ function updateHud(level) {
   status.textContent = msg;
   const full = world.count >= world.capacity;
   arc.style.strokeDashoffset = full ? 0 : 94.25 * (1 - noise.quiet / settings.interval);
-  $('nextCatLabel').textContent = full ? 'Library full!' : 'Next visitor';
-  if (world.count !== lastCount) {
-    lastCount = world.count;
-    $('catCountNum').textContent = lastCount;
-    $('catCountLabel').textContent = lastCount === 1 ? 'cat visiting' : 'cats visiting';
+  $('nextCatLabel').textContent = full ? 'Library full!' : world.catCount >= 10 ? 'Someone special…' : 'Next visitor';
+  const cats = world.catCount;
+  const toby = !!world.toby;
+  const key = cats * 2 + toby;
+  if (key !== lastCount) {
+    lastCount = key;
+    $('catCountNum').textContent = cats;
+    $('catCountLabel').textContent = (cats === 1 ? 'cat visiting' : 'cats visiting') + (toby ? ' + Toby 🐶' : '');
   }
+  const back = world.recallable;
+  $('undo').classList.toggle('hidden', !back);
+  if (back) $('undoText').textContent = `${back.name} wandered off`;
 }
 
 // ---------------------------------------------------------------- render
@@ -227,6 +265,7 @@ window.cosy = {
     $('intro').classList.add('gone');
     for (let i = 0; i < n; i++) {
       const c = world.addCat();
+      if (c) c.waitClips = 0;
       if (!c) break;
       const s = c.spot;
       c.queue = []; c.seg = null;
