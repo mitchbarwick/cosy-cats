@@ -84,6 +84,13 @@
     },
     "bat": {
       "frames": 12
+    },
+    "attend": {
+      "frames": 20
+    },
+    "attendLoop": {
+      "frames": 72,
+      "loop": true
     }
   }
 }
