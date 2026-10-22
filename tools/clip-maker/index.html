@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Cosy Cats clip maker</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; background: #2b2420; color: #f1e4c8; margin: 24px; }
+    canvas { background: repeating-conic-gradient(#3a322c 0 25%, #463c35 0 50%) 0 0 / 32px 32px; display: block; margin: 12px 0; }
+    pre { background: #1b1310; padding: 12px; min-height: 4em; }
+    select, button { font: inherit; margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Placeholder clip maker</h1>
+  <p>Renders the procedural rig to 512 × 448 PNG frames (feet at 256, 416; facing right) and encodes
+    each clip to VP9-alpha WebM in <code>assets/cats/&lt;cat&gt;/</code>. Run with
+    <code>node tools/clip-maker/server.js</code>.</p>
+  <label>Cat <select id="cat"></select></label>
+  <label>Preview <select id="clip"></select></label>
+  <button id="go">Render clip set</button>
+  <canvas id="frame"></canvas>
+  <pre id="log"></pre>
+  <script type="module" src="maker.js"></script>
+</body>
+</html>

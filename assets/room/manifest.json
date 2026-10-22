@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "note": "Rendered in Blender by tools/blender/felt_room.py (node tools/blender/room.mjs).",
+  "frame": [
+    1920,
+    1080
+  ],
+  "scale": 1.2,
+  "camera": {
+    "ortho": true,
+    "pitch": 7,
+    "yaw": 0,
+    "pxPerUnit": 100.0
+  },
+  "plates": {
+    "sky": {
+      "file": "sky.png",
+      "box": [
+        740,
+        90,
+        440,
+        552
+      ]
+    },
+    "back": {
+      "file": "back.png",
+      "box": [
+        232,
+        112,
+        1688,
+        968
+      ]
+    },
+    "mid": {
+      "file": "mid.png",
+      "box": [
+        232,
+        112,
+        1688,
+        968
+      ]
+    },
+    "fore": {
+      "file": "fore.png",
+      "box": [
+        232,
+        112,
+        1688,
+        968
+      ]
+    }
+  },
+  "props": {
+    "armchair": {
+      "file": "armchair.png",
+      "z": 900,
+      "box": [
+        1094,
+        464,
+        480,
+        551
+      ]
+    },
+    "table": {
+      "file": "table.png",
+      "z": 871,
+      "box": [
+        470,
+        522,
+        350,
+        470
+      ]
+    },
+    "pouf": {
+      "file": "pouf.png",
+      "z": 964,
+      "box": [
+        328,
+        828,
+        284,
+        156
+      ]
+    },
+    "basket": {
+      "file": "basket.png",
+      "z": 960,
+      "box": [
+        1397,
+        810,
+        266,
+        227
+      ]
+    }
+  },
+  "lights": {
+    "lampShade": {
+      "file": "lampShade.png",
+      "box": [
+        522,
+        549,
+        136,
+        96
+      ]
+    },
+    "fireLogs": {
+      "file": "fireLogs.png",
+      "box": [
+        1610,
+        844,
+        177,
+        46
+      ]
+    }
+  },
+  "lightmap": "lightmap.png"
+}

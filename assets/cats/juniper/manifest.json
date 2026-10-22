@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "note": "Rendered in Blender by tools/blender (felt_cat.py), posed from the procedural rig.",
+  "frame": [
+    512,
+    448
+  ],
+  "anchor": [
+    256,
+    416
+  ],
+  "pxPerUnit": 1.5,
+  "fps": 24,
+  "walkSpeed": 55.92,
+  "formats": [
+    "webm"
+  ],
+  "clips": {
+    "walk": {
+      "frames": 24,
+      "loop": true
+    },
+    "stand": {
+      "frames": 72,
+      "loop": true
+    },
+    "sniff": {
+      "frames": 36,
+      "loop": true
+    },
+    "sit": {
+      "frames": 96,
+      "loop": true
+    },
+    "groom": {
+      "frames": 48,
+      "loop": true
+    },
+    "loaf": {
+      "frames": 96,
+      "loop": true
+    },
+    "sleepLoop": {
+      "frames": 144,
+      "loop": true
+    },
+    "knead": {
+      "frames": 32,
+      "loop": true
+    },
+    "nuzzle": {
+      "frames": 48,
+      "loop": true
+    },
+    "turn": {
+      "frames": 15
+    },
+    "circle": {
+      "frames": 60
+    },
+    "settle": {
+      "frames": 36
+    },
+    "wake": {
+      "frames": 48
+    },
+    "yawn": {
+      "frames": 40
+    },
+    "alert": {
+      "frames": 20
+    },
+    "stretch": {
+      "frames": 46
+    },
+    "crouch": {
+      "frames": 17
+    },
+    "jump": {
+      "frames": 15
+    },
+    "land": {
+      "frames": 9
+    },
+    "bat": {
+      "frames": 12
+    }
+  }
+}

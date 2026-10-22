@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "cosy-cats", "runtimeExecutable": "node", "runtimeArgs": ["server.js"], "port": 5173 },
+    { "name": "clip-maker", "runtimeExecutable": "node", "runtimeArgs": ["tools/clip-maker/server.js"], "port": 5174 }
+  ]
+}

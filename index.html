@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cosy Cats</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="stage">
+    <canvas id="scene"></canvas>
+
+    <!-- Start overlay: browsers need a click before mic + audio can start -->
+    <div id="intro" class="overlay">
+      <div class="card">
+        <h1>Cosy Cats</h1>
+        <p>Keep the library quiet and the cats will come to visit.<br />If it gets too noisy, a cat will wander off.</p>
+        <button id="startBtn" class="primary">Open the library</button>
+        <button id="startNoMicBtn" class="ghost">Start without microphone</button>
+        <p class="small">Uses your microphone only to measure loudness. Nothing is recorded or sent anywhere.</p>
+      </div>
+    </div>
+
+    <!-- Noise bar -->
+    <div id="hud">
+      <div id="catCount"><span class="paw">🐾</span> <span id="catCountNum">0</span> <span id="catCountLabel">cats visiting</span></div>
+      <div id="noiseWrap">
+        <div id="noiseLabel">Library volume</div>
+        <div id="noiseBar">
+          <div id="noiseFill"></div>
+          <div id="noiseLimit" title="Noise limit"></div>
+        </div>
+        <div id="noiseStatus">Lovely and quiet</div>
+      </div>
+      <div id="nextCat">
+        <div id="nextCatRing"><svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle id="nextCatArc" class="fg" cx="18" cy="18" r="15"/></svg><span>🐱</span></div>
+        <div id="nextCatLabel">Next visitor</div>
+      </div>
+    </div>
+
+    <!-- Teacher controls -->
+    <button id="settingsToggle" title="Settings">⚙</button>
+    <div id="settings" class="hidden">
+      <h2>Teacher controls</h2>
+      <label>Noise limit <span id="limitVal"></span>
+        <input type="range" id="limit" min="0.15" max="0.9" step="0.01" value="0.55" /></label>
+      <label>Mic sensitivity <span id="sensVal"></span>
+        <input type="range" id="sens" min="0.5" max="6" step="0.1" value="2" /></label>
+      <label>New cat every <span id="intervalVal"></span>
+        <input type="range" id="interval" min="10" max="300" step="5" value="60" /></label>
+      <label>Too loud for <span id="graceVal"></span> before a cat wanders off
+        <input type="range" id="grace" min="2.5" max="12" step="0.5" value="4" /></label>
+      <label class="row"><input type="checkbox" id="music" checked /> Lo-fi music</label>
+      <label class="row"><input type="checkbox" id="catSounds" checked /> Cat sounds</label>
+      <label class="row"><input type="checkbox" id="saver" checked /> Battery saver (30 fps)</label>
+      <div class="buttons">
+        <button id="addCat" class="primary">+ Add a cat</button>
+        <button id="removeCat">Send a cat home</button>
+      </div>
+      <div class="buttons">
+        <button id="micBtn">Enable microphone</button>
+        <button id="fullscreenBtn">Fullscreen</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
