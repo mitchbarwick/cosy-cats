@@ -12,24 +12,51 @@
   <div id="stage">
     <canvas id="scene"></canvas>
 
-    <!-- Start overlay: browsers need a click before mic + audio can start -->
+    <!-- Session picker: what are we doing, for how long. Also the click browsers need before audio. -->
     <div id="intro" class="overlay">
-      <div class="card">
+      <form id="picker" class="card">
         <h1>Cosy Cats</h1>
-        <p>Keep the library quiet and the cats will come to visit.<br />If it gets too noisy, a cat will wander off.</p>
-        <button id="startBtn" class="primary">Open the library</button>
-        <button id="startNoMicBtn" class="ghost">Start without microphone</button>
-        <p class="small">Uses your microphone only to measure loudness. Nothing is recorded or sent anywhere.</p>
+        <p>Set a quiet time. While the room stays calm, cats come to visit.<br />Fill the library and someone special comes too.</p>
+        <label class="field">What are we doing?
+          <input id="activity" type="text" maxlength="40" placeholder="Quiet reading" autocomplete="off" />
+        </label>
+        <div class="field">For how long?
+          <div id="lengths" class="chips">
+            <button type="button" data-min="5">5 min</button>
+            <button type="button" data-min="10">10 min</button>
+            <button type="button" data-min="15">15 min</button>
+            <button type="button" data-min="20">20 min</button>
+            <button type="button" data-min="30">30 min</button>
+            <span class="custom"><input id="customMin" type="number" min="5" max="90" step="1" placeholder="Other" aria-label="Other length in minutes" /> min</span>
+          </div>
+        </div>
+        <label class="row check"><input type="checkbox" id="useMic" checked /> Listen with the microphone</label>
+        <button id="startBtn" type="submit" class="primary">Start</button>
+        <p class="small">The microphone only measures loudness. Nothing is recorded or sent anywhere.</p>
+      </form>
+    </div>
+
+    <!-- Time's up -->
+    <div id="endCard" class="hidden">
+      <h2 id="endTitle">Quiet reading done!</h2>
+      <p id="endText">10 cats and Toby came to visit</p>
+      <div class="buttons">
+        <button id="endPlus1">+1 min</button>
+        <button id="endPlus5">+5 min</button>
+        <button id="endNew" class="primary">New session</button>
+        <button id="endClose" class="ghost">Close</button>
       </div>
     </div>
 
-    <!-- Noise bar -->
     <!-- Undo: bring back the animal that just left -->
     <div id="undo" class="hidden">
       <span id="undoText">Biscuit wandered off</span>
       <button id="undoBtn" class="primary">↩ Bring back</button>
     </div>
     <div id="pausedBanner" class="hidden">Paused · eyes on the teacher</div>
+    <div id="minuteNote" class="hidden">One minute left</div>
+    <div id="activityTag" class="hidden"></div>
+    <div id="fader"></div>
 
     <div id="hud">
       <button id="pauseBtn" title="Pause (Space)"><span id="pauseIcon">⏸</span> <span id="pauseLabel">Pause</span></button>
@@ -43,8 +70,10 @@
         <div id="noiseStatus">Lovely and quiet</div>
       </div>
       <div id="nextCat">
-        <div id="nextCatRing"><svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle id="nextCatArc" class="fg" cx="18" cy="18" r="15"/></svg><span>🐱</span></div>
-        <div id="nextCatLabel">Next visitor</div>
+        <div id="nextCatRing" title="Session time"><svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle id="nextCatArc" class="fg" cx="18" cy="18" r="15"/></svg><span>🐱</span></div>
+        <div id="nextCatLabel">15 min left</div>
+        <button id="plus1" class="mini" title="Add a minute">+1</button>
+        <button id="plus5" class="mini" title="Add five minutes">+5</button>
       </div>
     </div>
 
@@ -56,21 +85,29 @@
         <input type="range" id="limit" min="0.15" max="0.9" step="0.01" value="0.55" /></label>
       <label>Mic sensitivity <span id="sensVal"></span>
         <input type="range" id="sens" min="0.5" max="6" step="0.1" value="2" /></label>
-      <label>New cat every <span id="intervalVal"></span>
-        <input type="range" id="interval" min="10" max="300" step="5" value="60" /></label>
-      <label>Too loud for <span id="graceVal"></span> before a cat wanders off
-        <input type="range" id="grace" min="2.5" max="12" step="0.5" value="4" /></label>
+      <label>How strict
+        <select id="strict">
+          <option value="gentle">Gentle: cats stay through longer noise</option>
+          <option value="normal" selected>Normal</option>
+          <option value="strict">Strict: cats leave sooner</option>
+        </select></label>
       <label class="row"><input type="checkbox" id="music" checked /> Lo-fi music</label>
-      <label class="row"><input type="checkbox" id="catSounds" checked /> Cat sounds</label>
+      <label class="row"><input type="checkbox" id="catSounds" checked /> Animal sounds</label>
+      <label class="row"><input type="checkbox" id="chime" checked /> End chime</label>
       <label class="row"><input type="checkbox" id="saver" checked /> Battery saver (30 fps)</label>
       <div class="buttons">
-        <button id="addCat" class="primary">+ Add a cat</button>
-        <button id="removeCat">Send a cat home</button>
-      </div>
-      <div class="buttons">
+        <button id="endNow">End session now</button>
         <button id="micBtn">Enable microphone</button>
         <button id="fullscreenBtn">Fullscreen</button>
       </div>
+      <details id="testing">
+        <summary>Testing</summary>
+        <div class="buttons">
+          <button id="addCat">+ Add a cat</button>
+          <button id="removeCat">Send a cat home</button>
+          <button id="skipMin">Skip 1 min</button>
+        </div>
+      </details>
     </div>
   </div>
 

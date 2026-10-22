@@ -433,7 +433,40 @@ export class AudioEngine {
 
   setMusic(on) {
     this.musicOn = on;
-    if (this.music) this.music.bus.gain.setTargetAtTime(on ? 0.5 : 0, this.ctx.currentTime, 0.5);
+    this.applyMusic();
+  }
+
+  // 0..1 on top of on/off: the session fades the music over its last 30 s
+  setMusicLevel(level) {
+    if (Math.abs((this.musicLevel ?? 1) - level) < 0.02) return;
+    this.musicLevel = level;
+    this.applyMusic();
+  }
+
+  applyMusic() {
+    if (this.music) this.music.bus.gain.setTargetAtTime(this.musicOn ? 0.5 * (this.musicLevel ?? 1) : 0, this.ctx.currentTime, 0.5);
+  }
+
+  // Time's up: a soft rising bell, quieter than a meow.
+  endChime() {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    const t0 = c.currentTime + 0.05;
+    [77, 81, 84, 89].forEach((n, i) => {
+      const t = t0 + i * 0.22;
+      const f = 440 * Math.pow(2, (n - 69) / 12);
+      for (const [mult, vol, dec] of [[1, 0.05, 2.2], [2.76, 0.012, 0.9]]) {
+        const o = c.createOscillator();
+        o.type = 'sine';
+        o.frequency.value = f * mult;
+        const g = c.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(vol, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+        o.connect(g).connect(this.sfxBus);
+        o.start(t); o.stop(t + dec + 0.05);
+      }
+    });
   }
 
   schedule() {

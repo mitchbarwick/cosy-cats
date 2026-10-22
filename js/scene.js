@@ -1193,6 +1193,11 @@ export class Scene {
       { x: 1010, y: 300, w: 200, v: 4 },
     ];
     this.moonLight = 1;
+    // session cues, set by main.js: progress 0..1 over the session, finale 0..1 over its last
+    // minute, reward 0..1 once time is up. The room keeps time instead of a countdown.
+    this.progress = 0;
+    this.finale = 0;
+    this.reward = 0;
     this.yarn = { x: 1060, y: 948, vx: 0, rot: 0, r: 17 };
     this.cam = { x: 0, y: 0 };
     this.lastScale = 0;
@@ -1389,9 +1394,15 @@ export class Scene {
       ctx.translate(this.cam.x * d, this.cam.y * d);
       const [sx, sy, sw, sh] = this.skyBox;
       ctx.drawImage(this.sky, sx, sy, sw, sh);
+      // the night deepens as the session goes on
+      if (this.progress > 0) {
+        ctx.fillStyle = `rgba(8,12,36,${0.3 * this.progress})`;
+        ctx.fillRect(sx, sy, sw, sh);
+      }
+      const starGain = 1 + 0.5 * this.progress + 0.4 * this.reward;
       for (const s of this.stars) {
         const tw = 0.4 + 0.6 * noise1(t * 0.8 + s.ph * 7);
-        ctx.fillStyle = `rgba(255,248,225,${0.35 + tw * 0.6})`;
+        ctx.fillStyle = `rgba(255,248,225,${Math.min(1, (0.35 + tw * 0.6) * starGain)})`;
         ctx.beginPath(); ctx.arc(s.x, s.y, s.s * (0.6 + tw * 0.5), 0, Math.PI * 2); ctx.fill();
       }
       for (const c of this.clouds) ctx.drawImage(this.cloud, c.x, c.y, c.w, c.w * 110 / 300);
@@ -1449,12 +1460,13 @@ export class Scene {
     ctx.fillStyle = radial(ctx, cx, bottom - 20, 120, [[0, 'rgba(255,140,50,0.5)'], [1, 'rgba(255,80,20,0)']]);
     ctx.fillRect(x0, FIRE.open.top, x1 - x0, bottom - FIRE.open.top);
     const tongues = 7;
+    const flame = this.flameLevel();
     for (let layer = 0; layer < 2; layer++) {
       for (let i = 0; i < tongues; i++) {
         const u = i / (tongues - 1) - 0.5;
         const bx = cx + u * 110;
         const n = noise1(t * 2.4 + i * 3.1 + layer * 11);
-        const hgt = (layer ? 55 : 95) * (1 - Math.abs(u) * 0.9) * (0.65 + n * 0.6) + 20;
+        const hgt = ((layer ? 55 : 95) * (1 - Math.abs(u) * 0.9) * (0.65 + n * 0.6) + 20) * flame;
         const sway = (noise1(t * 1.7 + i * 5.3) - 0.5) * 22;
         const wdt = (layer ? 13 : 20) * (1 - Math.abs(u) * 0.4);
         const by = bottom - 24;
@@ -1491,11 +1503,17 @@ export class Scene {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 9; i++) {
       const ex = cx - 60 + i * 15;
-      const a = 0.4 + 0.5 * noise1(t * 3 + i * 7);
+      const a = Math.min(1, (0.4 + 0.5 * noise1(t * 3 + i * 7)) * (1.6 - 0.6 * flame));
       ctx.fillStyle = `rgba(255,${120 + i * 6},40,${a})`;
       ctx.beginPath(); ctx.arc(ex, bottom - 4 - (i % 3) * 2, 3 + (i % 2), 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
+  }
+
+  // 1 = a full fire; it sinks towards embers over the last fifth of a session, glowing again at the end
+  flameLevel() {
+    const late = clamp((this.progress - 0.8) / 0.2, 0, 1);
+    return 1 - 0.5 * late * late * (3 - 2 * late) + 0.2 * this.reward;
   }
 
   drawProp(ctx, p) {
@@ -1506,12 +1524,13 @@ export class Scene {
   drawGlow(ctx, t) {
     if (!this.ready) return;
     const fl = 0.85 + 0.15 * noise1(t * 4) + 0.08 * noise1(t * 11 + 3);
-    const lampFl = 0.97 + 0.03 * noise1(t * 2.3 + 8);
+    const lampFl = (0.97 + 0.03 * noise1(t * 2.3 + 8)) * (1 + 0.25 * this.finale + 0.15 * this.reward);
+    const fire = this.flameLevel();
     const tableF = depthFactor(871);
 
     this.at(ctx, LAYER.mid, () => {
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = radial(ctx, 1700, 800, 520, [[0, `rgba(255,120,40,${0.2 * fl})`], [0.5, `rgba(255,100,30,${0.06 * fl})`], [1, 'rgba(255,80,20,0)']]);
+      ctx.fillStyle = radial(ctx, 1700, 800, 520, [[0, `rgba(255,120,40,${0.2 * fl * fire})`], [0.5, `rgba(255,100,30,${0.06 * fl * fire})`], [1, 'rgba(255,80,20,0)']]);
       ctx.fillRect(1100, 300, 820, 780);
       // candles on the mantel
       CANDLES.forEach((c, i) => {
@@ -1541,8 +1560,9 @@ export class Scene {
       ctx.fillStyle = radial(ctx, 960, 420, 300, [[0, `rgba(110,130,180,${0.12 * this.moonLight})`], [1, 'rgba(110,130,180,0)']]);
       ctx.fillRect(640, 100, 640, 640);
       ctx.globalCompositeOperation = 'lighter';
+      const sparkle = 1 + 0.8 * this.finale + 0.6 * this.reward; // brighter for the last minute and the finish
       for (const b of FAIRY) {
-        const tw = 0.6 + 0.4 * noise1(t * 0.9 + b.ph);
+        const tw = Math.min(1.8, (0.6 + 0.4 * noise1(t * (0.9 + this.reward * 1.5) + b.ph)) * sparkle);
         ctx.fillStyle = radial(ctx, b.x, b.y + 4, 26, [[0, rgba(b.hue, 0.45 * tw)], [1, rgba(b.hue, 0)]]);
         ctx.fillRect(b.x - 26, b.y - 22, 52, 52);
         ctx.fillStyle = rgba(b.hue, 0.95);

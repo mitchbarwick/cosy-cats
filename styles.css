@@ -82,6 +82,22 @@ button.primary:hover { background: #e2845a; }
 button.ghost { background: transparent; box-shadow: none; text-decoration: underline; opacity: 0.75; display: block; margin: 12px auto 0; font-size: 15px; }
 
 .card button.primary { font-size: 22px; padding: 14px 34px; }
+.card .field { display: block; text-align: left; font-size: 17px; font-weight: 500; margin: 0 0 18px; }
+.card .field input[type="text"] {
+  display: block; width: 100%; margin-top: 8px; padding: 11px 16px; font: inherit; font-size: 18px;
+  border: 2px solid rgba(59, 42, 34, 0.15); border-radius: 14px; background: #fffaf2; color: var(--ink);
+}
+.card .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; align-items: center; }
+.card .chips button { padding: 9px 16px; font-size: 17px; }
+.card .chips button.on { background: var(--accent); color: #fff; }
+.card .chips .custom { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; }
+.card .chips .custom input {
+  width: 92px; padding: 8px 10px; font: inherit; font-size: 17px; text-align: center;
+  border: 2px solid rgba(59, 42, 34, 0.15); border-radius: 999px; background: #fffaf2; color: var(--ink);
+}
+.card .chips .custom input.on { border-color: var(--accent); }
+.card label.check { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; margin: 4px 0 20px; }
+.card label.check input { accent-color: var(--accent); width: 18px; height: 18px; }
 
 /* ---------- HUD ---------- */
 #hud {
@@ -119,6 +135,42 @@ button.ghost { background: transparent; box-shadow: none; text-decoration: under
 #undo button { font-size: 16px; padding: 8px 18px; }
 #pausedBanner { top: 22px; padding: 10px 26px; font-size: 22px; font-weight: 600; color: var(--accent-dark); }
 #undo.hidden, #pausedBanner.hidden { opacity: 0; transform: translate(-50%, 8px); pointer-events: none; }
+
+/* one-minute note, activity name, end card, room-reset fade */
+#minuteNote, #activityTag {
+  position: absolute;
+  z-index: 5;
+  border-radius: 999px;
+  background: rgba(255, 246, 230, 0.88);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+#minuteNote { top: 22px; left: 50%; transform: translateX(-50%); padding: 8px 22px; font-size: 20px; font-weight: 600; color: var(--accent-dark); }
+#minuteNote.hidden { opacity: 0; transform: translate(-50%, -8px); pointer-events: none; }
+#activityTag { top: 20px; left: 20px; padding: 8px 20px; font-size: 19px; font-weight: 600; opacity: 0.9; }
+#activityTag.hidden { opacity: 0; pointer-events: none; }
+
+#endCard {
+  position: absolute;
+  top: 6vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  padding: 22px 30px 20px;
+  border-radius: 26px;
+  background: var(--card);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+#endCard.hidden { opacity: 0; transform: translate(-50%, -14px); pointer-events: none; }
+#endCard h2 { margin: 0 0 4px; font-size: 32px; font-weight: 600; color: var(--accent-dark); }
+#endCard p { margin: 0 0 16px; font-size: 21px; }
+#endCard .buttons { display: flex; gap: 10px; justify-content: center; align-items: center; }
+#endCard .buttons button.ghost { display: inline-block; margin: 0; }
+
+#fader { position: absolute; inset: 0; background: #1b1310; opacity: 0; pointer-events: none; transition: opacity 0.7s ease; z-index: 9; }
+#fader.on { opacity: 1; }
 
 #catCount { font-size: 20px; font-weight: 600; white-space: nowrap; min-width: 150px; }
 #catCount .paw { font-size: 18px; }
@@ -166,7 +218,9 @@ button.ghost { background: transparent; box-shadow: none; text-decoration: under
 #nextCatRing .bg { stroke: rgba(59, 42, 34, 0.12); }
 #nextCatRing .fg { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 94.25; stroke-dashoffset: 94.25; transition: stroke-dashoffset 0.3s linear; }
 #nextCatRing span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 17px; }
-#nextCatLabel { font-size: 15px; opacity: 0.75; }
+#nextCatLabel { font-size: 17px; font-weight: 600; min-width: 92px; }
+button.mini { padding: 6px 11px; font-size: 14px; font-weight: 600; }
+#hud.idle #nextCat button.mini { visibility: hidden; }
 
 /* ---------- Settings ---------- */
 #settingsToggle {
@@ -204,6 +258,9 @@ button.ghost { background: transparent; box-shadow: none; text-decoration: under
 #settings input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; }
 #settings .buttons { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 #settings .buttons button { flex: 1; font-size: 15px; padding: 9px 12px; }
+#settings select { display: block; width: 100%; margin-top: 6px; padding: 8px 10px; font: inherit; font-size: 15px; border-radius: 12px; border: 2px solid rgba(59, 42, 34, 0.15); background: #fffaf2; color: var(--ink); }
+#settings details { margin-top: 14px; font-size: 14px; opacity: 0.85; }
+#settings summary { cursor: pointer; }
 
 @media (max-width: 760px) {
   #hud { flex-wrap: wrap; border-radius: 22px; gap: 10px; }

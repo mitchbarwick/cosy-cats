@@ -1,15 +1,23 @@
 # Cosy Cats
 
-A quiet-classroom helper. A cosy night-time library is shown on screen. While the room stays quiet, cats wander in one by one. Each one sniffs its chosen spot, turns a circle, kneads, then curls up on the bookshelf, window sill, armchair, mantel, pouf, hearth or rug. Once settled they doze, groom, yawn, play with the yarn and say hello to each other.
+A quiet-time timer for the classroom. The teacher picks an activity and a length ("Quiet reading, 15 minutes") and a cosy night-time library appears on the projector. Over that time, while the room stays calm, ten cats wander in one by one. Each one sniffs its chosen spot, turns a circle, kneads, then curls up on the bookshelf, window sill, armchair, mantel, pouf, hearth or rug. If all ten are there for the final minute, one last visitor comes: **Toby**, a white French bulldog.
 
-If the room gets noisy, nothing happens straight away. After a moment of steady noise, the cats look up and the bar says "The cats are listening…". If the noise carries on, the cat that has been there longest wakes, stretches and wanders off. It's never startled: the aim is that children want the cats back, not that they feel told off. A cough or a dropped pencil does nothing, and new cats only start arriving again once the room has been calm for a while.
+The session always ends when the teacher said it would. Noise never adds time; it decides how full the room is at the end.
 
-When all ten cats are in, one last visitor arrives: **Toby**, a white French bulldog, who flops on the rug and snorts and snores instead of meowing.
+- **Arrivals are front-loaded.** Cats come quickly at first and further apart later. In a 15-minute session the first gaps are under a minute and the last about two. Early on, mistakes are cheap; later, each visitor takes more focus to earn.
+- **A cat only walks in while the room is calm.** If it's noisy when one is due, it waits for the room to settle.
+- **Steady noise sends a cat home, gently.** After a moment of noise the cats look up ("The cats are listening…"). If it carries on, the cat that has been there longest wakes, stretches and wanders off. Its replacement is due one gap later: soon early in the session, a couple of minutes late on. A cough or a dropped pencil does nothing.
+- **The room keeps time.** The night outside deepens over the session, the fire settles to embers near the end, and the fairy lights brighten for the last minute.
+- **The ending is a reward.** A soft chime plays, every animal sits up and faces the room, hearts float up, and a card says who came. The animals then stay so the class can enjoy the room they filled.
 
 ## In class
 
-- **⏸ Pause** (or the Space bar): for giving an instruction. Nobody arrives or leaves, the music fades, and every animal sits up and turns to face the room until you press **▶ Resume**.
-- **↩ Bring back**: whenever an animal wanders off, a button above the bar offers to bring it back for 30 seconds. Use it if a cough or a door slam sent a cat home unfairly. If the cat is still walking out it turns round; if it's gone it walks back in to its old spot.
+- **Start**: pick a length (5, 10, 15, 20 or 30 minutes, or any length from 5 to 90), optionally name the activity, and press Start or Enter. Every session starts with an empty room.
+- **Time left** shows in the bar, in whole minutes, next to a ring that fills over the session.
+- **+1 / +5**: add time to a session that's going well, from the bar or from the end card.
+- **⏸ Pause** (or the Space bar): for giving an instruction. The clock stops, nobody arrives or leaves, the music fades, and every animal sits up and turns to face the room until you press **▶ Resume**.
+- **↩ Bring back**: when an animal wanders off, a button above the bar offers to bring it back for 30 seconds. Use it if a door slam sent a cat home unfairly.
+- **New session**: from the end card or the bar once time is up. The room fades to empty and the picker returns.
 
 ## Run it
 
@@ -19,29 +27,30 @@ node server.js
 
 Then open http://localhost:5173. The microphone needs `localhost` or https. You can also host the folder as static files on any https site. There's no build step and nothing to install.
 
-## Controls
+## Settings
 
 The ⚙ button (top right) opens the teacher controls:
 
 - **Noise limit**: where the marker sits on the volume bar.
 - **Mic sensitivity**: raise it if the bar barely moves, lower it if it's always high.
-- **New cat every**: how many seconds of quiet it takes for a new visitor to arrive.
-- **Too loud for**: how long the room has to stay over the limit before a cat wanders off. Cats look up after 1.5 s.
-- **Lo-fi music / Cat sounds**: toggles.
+- **How strict**: Gentle, Normal or Strict sets how long the room can stay noisy before a cat wanders off (6, 4 or 2.6 seconds). Cats look up after 1.5 seconds.
+- **Lo-fi music / Animal sounds / End chime**: toggles. The chime is on by default.
 - **Battery saver (30 fps)**: on by default, so an older laptop can run a full lesson quietly.
-- **+ Add a cat / Send a cat home**: manual controls, for testing.
+- **End session now**, **Enable microphone** and **Fullscreen**.
+- **Testing**: add a cat, send one home, or skip a minute.
 
-Settings are saved in the browser.
+Settings, the last length and the activity name are saved in the browser.
 
 ## How it's built
 
-Everything is drawn with Canvas 2D and Web Audio. There are no image or sound files, apart from optional cat clips.
+Everything is drawn with Canvas 2D and Web Audio, apart from the Blender-rendered room plates and animal clips.
 
-- `js/scene.js`: the room, which is pre-rendered once, plus the animated sky, fire, candles, fairy lights and a lighting pass.
-- `js/catArt.js`: the procedural cat rig (poses, ten looks, accessories).
-- `js/clipCat.js`: plays pre-rendered alpha video clips, in place of the rig, for any cat that has them.
-- `js/cats.js`: behaviour (routes, jumps, resting, play, greetings, leaving).
-- `js/audio.js`: mic loudness, synthesised meows, purrs and trills, and the generative lo-fi loop.
-- `js/main.js`: the noise state machine (with hysteresis), the HUD, the parallax camera and the render loop.
+- `js/session.js`: the session clock and the arrival schedule. Cat k of 10 is due at 30 s + (length − 90 s) × (k ÷ 10)^1.5; Toby is due in the final minute on a full house.
+- `js/main.js`: the session picker, the noise state machine (with hysteresis), the HUD, the end card, the parallax camera and the render loop.
+- `js/scene.js`: the room (rendered plates or the drawn fallback) plus the live sky, fire, candles, fairy lights and lighting, which also carry the session cues.
+- `js/cats.js`: behaviour (routes, jumps, resting, play, greetings, leaving, pause and undo).
+- `js/catArt.js`: the procedural rig (poses, ten cat looks, Toby, accessories).
+- `js/clipCat.js`: plays pre-rendered alpha video clips, in place of the rig, for any animal that has them.
+- `js/audio.js`: mic loudness, synthesised meows, purrs, Toby's snorts and snores, the end chime and the generative lo-fi loop.
 
-A cat is drawn by the procedural rig unless it has a clip set in `assets/cats/<name>/`. [ASSETS.md](ASSETS.md) describes that pre-rendered route: a Blender-rendered video clip with alpha for each behaviour, composited over the baked room. Biscuit currently has a felt cat set rendered in Blender by `tools/blender/render.mjs`, posed from the rig.
+All ten cats and Toby have felt clip sets in `assets/cats/<name>/`, rendered in Blender by `tools/blender/render.mjs` and posed from the rig. [ASSETS.md](ASSETS.md) describes the clip format. Safari can't show these clips with transparency yet, so it shows the drawn animals.

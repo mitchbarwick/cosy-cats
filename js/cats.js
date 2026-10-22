@@ -346,6 +346,7 @@ class Cat {
     if (this.busy) this.busy = null;
     const settled = this.state === 'resting' || this.state === 'settling';
     w.departed.push({ cat: this, def: this.def, spot: this.spot, at: w.time });
+    w.onDepart(this.def);
     this.state = 'leaving';
     this.clip = 'leave';
     this.label = 0;
@@ -831,6 +832,8 @@ export class CatWorld {
     this.departed = []; // recent leavers, newest last, for the undo button
     this.pixelScale = 1;
     this.onChange = () => {};
+    this.onDepart = () => {}; // a cat wandered off (the session schedules its replacement)
+    this.onRecall = () => {}; // undo brought one back
     this.clipsReady = preloadClipSets(ANIMAL_DEFS);
   }
 
@@ -850,8 +853,8 @@ export class CatWorld {
     return spots.map((s) => ({ s, v: score(s) + rand(0, 400) + (isFloorSpot(s) ? 0 : 150) })).sort((a, b) => b.v - a.v)[0].s;
   }
 
-  // Next visitor: a cat who isn't here yet, or Toby once every cat has come. `want` forces one
-  // (the undo button), with `prefer` as the spot to go back to if it's still free.
+  // Next visitor: a cat who isn't here yet. `want` forces one (the undo button, or Toby when the
+  // session calls him), with `prefer` as the spot to go back to if it's still free.
   addCat(want = null, prefer = null) {
     if (this.count >= this.capacity) return null;
     const present = new Set(this.cats.map((c) => c.def.name));
@@ -862,8 +865,7 @@ export class CatWorld {
         // prefer a cat whose clips have arrived, so early visitors don't have to wait off-stage
         const ready = defs.filter((d) => !ClipCatRenderer.loading(d));
         def = pick(ready.length ? ready : defs);
-      } else if (!present.has(TOBY.name)) def = TOBY;
-      else return null;
+      } else return null;
     }
     if (present.has(def.name)) return null;
     const spot = prefer && !prefer.taken && spotFits(prefer, def) ? prefer : this.pickSpot(def);
@@ -894,6 +896,7 @@ export class CatWorld {
     const cat = this.cats.find((c) => c === d.cat && c.state === 'leaving');
     if (cat) cat.comeBack();
     else this.addCat(d.def, d.spot);
+    this.onRecall(d.def);
     this.onChange();
     return d.def;
   }
@@ -929,6 +932,28 @@ export class CatWorld {
     old.taken = null;
     cat.call(() => cat.goToSpot(target));
     return true;
+  }
+
+  addToby() { return this.addCat(TOBY); }
+
+  // A new session starts with an empty room.
+  reset() {
+    for (const c of this.cats) c.clips?.dispose();
+    this.cats = [];
+    for (const s of SPOTS) s.taken = null;
+    this.particles = [];
+    this.departed = [];
+    this.yarnUser = null;
+    this.alert = false;
+    this.paused = false;
+    this.onChange();
+  }
+
+  // Time's up: a little shower of hearts over everyone who came.
+  cheer() {
+    this.cats.filter((c) => c.state !== 'leaving').forEach((c, i) => {
+      this.addParticle('heart', c.x, c.y - 150 * c.scale * c.def.size * CAT_SCALE, 0.4 + i * 0.25);
+    });
   }
 
   addParticle(type, x, y, delay) {
