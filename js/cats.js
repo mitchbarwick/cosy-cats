@@ -13,6 +13,7 @@ const WALK_SPEED = 66;
 // (±17 px) and the cat's own length never show, close enough that they appear straight away.
 const VIEW_MID = VIEW.x + VIEW.w / 2;
 const EXIT_PAD = 40;   // px beyond the view edge, on top of the cat's reach
+const CLIP_WAIT = 12;   // s an arriving cat waits off-stage for its clips before coming in on the rig
 const REACH = 100;     // cat units from the feet to the nose or tail tip, side-on
 const SPR = { l: 170, t: 240, w: 340, h: 280 }; // sprite box in cat-local units (origin at feet)
 
@@ -325,6 +326,11 @@ class Cat {
   // --- update ----------------------------------------------------------------
   update(dt) {
     const w = this.world;
+    if (this.waitClips) {
+      if (!ClipCatRenderer.loading(this.def)) this.clips = ClipCatRenderer.for(this.def);
+      if (this.clips || w.time > this.waitClips || this.state !== 'arriving') this.waitClips = 0;
+      else return;
+    }
     this.age += dt;
     if (this.label > 0) this.label -= dt;
 
@@ -640,13 +646,18 @@ export class CatWorld {
     const defs = CAT_DEFS.filter((d) => !present.has(d.name));
     const spots = this.freeSpots();
     if (!defs.length || !spots.length) return null;
-    const def = pick(defs);
+    // prefer a cat whose clips have arrived, so early visitors don't have to wait off-stage
+    const ready = defs.filter((d) => !ClipCatRenderer.loading(d));
+    const def = pick(ready.length ? ready : defs);
     // spread cats out: favour spots far from other cats so each one is easy to count
     const score = (s) => Math.min(...this.cats.filter((c) => c.spot && c.state !== 'leaving').map((c) => Math.hypot(c.spot.x - s.x, c.spot.y - s.y)), 2000);
     const ranked = spots.map((s) => ({ s, v: score(s) + rand(0, 400) + (isFloorSpot(s) ? 0 : 150) })).sort((a, b) => b.v - a.v);
     const spot = ranked[0].s;
     const cat = new Cat(def, this);
     cat.clips = ClipCatRenderer.for(def); // pre-rendered clips when this cat has them, else the rig
+    // over a slow connection its clips may still be downloading: it waits off-stage for them
+    // (up to a limit, then comes in on the rig) rather than arriving as the drawn cat
+    if (!cat.clips && ClipCatRenderer.loading(def)) cat.waitClips = this.time + CLIP_WAIT;
     const fromLeft = spot.route[0].x < VIEW_MID;
     cat.y = FLOOR_LANE + rand(-6, 10);
     cat.x = offstageX(def, fromLeft ? -1 : 1, cat.y);

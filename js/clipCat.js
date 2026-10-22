@@ -54,7 +54,8 @@ const SAFARI = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.u
 const EXT = SAFARI ? 'mov' : 'webm';
 const MIME = SAFARI ? 'video/quicktime' : 'video/webm';
 
-const sets = new Map(); // slug → loaded set, or null when the cat has no clips
+const sets = new Map(); // slug → loaded set (its extra clips may still be arriving), or null when the cat has no clips
+const loading = new Set(); // slugs still fetching the clips a cat can't do without
 
 async function loadSet(name) {
   const base = `${ROOT}${name}/`;
@@ -68,12 +69,16 @@ async function loadSet(name) {
   if (!document.createElement('video').canPlayType(SAFARI ? 'video/mp4; codecs="hvc1"' : 'video/webm; codecs="vp9"')) return null;
   const urls = {};
   // whole files in memory as blob URLs: instant seeks and loops, no server range support needed
-  await Promise.all(Object.keys(m.clips).map(async (c) => {
+  const get = async (c) => {
     try {
       const r = await fetch(`${base}${c}.${EXT}`);
       if (r.ok) urls[c] = URL.createObjectURL(new Blob([await r.arrayBuffer()], { type: MIME }));
     } catch {}
-  }));
+  };
+  // the clips a cat can't do without come first, so it can walk in as soon as possible over a
+  // real connection; the rest come later with loadRest() (until then each falls back to a neighbour)
+  await Promise.all(REQUIRED.filter((c) => m.clips[c]).map(get));
+  const rest = Object.keys(m.clips).filter((c) => !REQUIRED.includes(c));
   const missing = REQUIRED.filter((c) => !urls[c]);
   if (missing.length) {
     console.warn(`Cat clips for "${name}" are missing ${missing.join(', ')}; using the procedural rig.`);
@@ -84,18 +89,37 @@ async function loadSet(name) {
   const ppu = m.pxPerUnit;
   const fps = m.fps || 24;
   const dur = Object.fromEntries(Object.entries(m.clips).map(([c, d]) => [c, (d.frames || 1) / (d.fps || fps)]));
-  return { name, m, urls, fps, dur, ax, ay, ppu, box: { l: ax / ppu, t: ay / ppu, w: fw / ppu, h: fh / ppu } };
+  const set = { name, m, urls, fps, dur, ax, ay, ppu, box: { l: ax / ppu, t: ay / ppu, w: fw / ppu, h: fh / ppu } };
+  set.loadRest = () => Promise.all(rest.map(get));
+  return set;
 }
 
-// Fetch every cat's set up front. A cat that arrives before its set is ready uses the rig
-// for that whole visit, so a cat never switches renderer mid-walk.
+// Fetch every cat's set up front, two cats at a time and only their essential clips (about
+// 470 KB each), so over a real connection the first visitors are ready within seconds instead
+// of after all 14 MB; then every cat's other clips. A cat never switches renderer mid-walk:
+// visitors are picked from the cats that are ready, and one added while its set is still
+// loading waits off-stage for it (see ClipCatRenderer.loading).
 export function preloadClipSets(defs) {
   if (DISABLED) return Promise.resolve();
   const names = OVERRIDE ? [OVERRIDE] : defs.map((d) => slug(d.name));
-  return Promise.all(names.map(async (n) => { sets.set(n, await loadSet(n)); }));
+  for (const n of names) loading.add(n);
+  const queue = [...names];
+  const worker = async () => {
+    for (let n; (n = queue.shift());) {
+      sets.set(n, await loadSet(n));
+      loading.delete(n);
+    }
+  };
+  return Promise.all([worker(), worker()])
+    .then(() => Promise.all([...sets.values()].filter(Boolean).map((set) => set.loadRest())));
 }
 
 export class ClipCatRenderer {
+  // true while this cat's clips are still on their way
+  static loading(def) {
+    return loading.has(OVERRIDE || slug(def.name));
+  }
+
   static for(def) {
     const set = sets.get(OVERRIDE || slug(def.name));
     return set ? new ClipCatRenderer(set) : null;
