@@ -84,7 +84,7 @@ export class AudioEngine {
 
   meow(voice, vol = 0.6) {
     if (!this.ctx || !this.catSounds) return;
-    if (voice.dog) return this.snort(vol);
+    if (voice.dog) return Math.random() < 0.5 ? this.snort(vol) : this.grumble(vol);
     const c = this.ctx;
     const t = c.currentTime + 0.02;
     const { pitch, len, bright } = voice;
@@ -139,7 +139,7 @@ export class AudioEngine {
 
   trill(voice) {
     if (!this.ctx || !this.catSounds) return;
-    if (voice.dog) return this.snort(0.8, 2);
+    if (voice.dog) { this.snort(0.8, 2); return this.grumble(0.7, 0.6); }
     const c = this.ctx;
     const t = c.currentTime + 0.02;
     const d = 0.38;
@@ -207,68 +207,166 @@ export class AudioEngine {
     src.stop(t + dur + 0.2); lfo.stop(t + dur + 0.2);
   }
 
-  // Toby's hello: one or two soft, snuffly French-bulldog snorts.
+  // ---------------------------------------------------------------- Toby's sounds
+  // French-bulldog noises are mostly air through a squashed nose: shaped bursts of the shared
+  // noise, often with a fast flutter (a soft palate or loose lips), plus a low voiced grunt.
+  // All gentle, and each one holds the mic off for as long as it plays.
+  burst(t, d, { type = 'bandpass', f = 600, f2 = f, q = 1, vol = 0.05, attack = 0.01, flutter = 0, depth = 0.6, out = this.sfxBus } = {}) {
+    const c = this.ctx;
+    const src = c.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const flt = c.createBiquadFilter();
+    flt.type = type;
+    flt.Q.value = q;
+    flt.frequency.setValueAtTime(f, t);
+    flt.frequency.exponentialRampToValueAtTime(f2, t + d);
+    const env = c.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(vol, t + attack);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + d);
+    let node = src.connect(flt);
+    if (flutter) {
+      const am = c.createGain();
+      am.gain.value = 1 - depth;
+      const lfo = c.createOscillator();
+      lfo.type = 'triangle';
+      lfo.frequency.value = flutter;
+      const lg = c.createGain();
+      lg.gain.value = depth;
+      lfo.connect(lg).connect(am.gain);
+      node = node.connect(am);
+      lfo.start(t); lfo.stop(t + d + 0.05);
+    }
+    node.connect(env).connect(out);
+    src.start(t, Math.random() * 1.5); src.stop(t + d + 0.05);
+  }
+
+  grunt(t, d, f0, f1, vol, out = this.sfxBus) {
+    const c = this.ctx;
+    const o = c.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + d);
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 520; lp.Q.value = 2;
+    const env = c.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(vol, t + 0.03);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + d);
+    o.connect(lp).connect(env).connect(out);
+    o.start(t); o.stop(t + d + 0.05);
+  }
+
+  // Toby's hello: one or two soft, snuffly snorts, each ending in a wet little click.
   snort(vol = 0.6, count = 1 + Math.floor(Math.random() * 2)) {
+    if (!this.ctx || !this.catSounds) return;
     const c = this.ctx;
     let t = c.currentTime + 0.02;
     for (let i = 0; i < count; i++) {
-      const d = 0.16 + Math.random() * 0.08;
-      const src = c.createBufferSource();
-      src.buffer = this.noiseBuf;
-      const bp = c.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.setValueAtTime(520, t);
-      bp.frequency.linearRampToValueAtTime(320, t + d);
-      bp.Q.value = 3;
-      const grunt = c.createOscillator();
-      grunt.type = 'sawtooth';
-      grunt.frequency.setValueAtTime(115, t);
-      grunt.frequency.linearRampToValueAtTime(85, t + d);
-      const glp = c.createBiquadFilter();
-      glp.type = 'lowpass'; glp.frequency.value = 600;
-      const gg = c.createGain();
-      gg.gain.value = 0.35;
-      const env = c.createGain();
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(0.16 * vol, t + 0.02);
-      env.gain.exponentialRampToValueAtTime(0.001, t + d);
-      src.connect(bp).connect(env);
-      grunt.connect(glp).connect(gg).connect(env);
-      env.connect(this.sfxBus);
-      src.start(t, Math.random()); src.stop(t + d + 0.05);
-      grunt.start(t); grunt.stop(t + d + 0.05);
+      const d = 0.17 + Math.random() * 0.08;
+      this.burst(t, d, { f: 950, f2: 380, q: 3, vol: 0.12 * vol, attack: 0.015, flutter: 60, depth: 0.5 });
+      this.grunt(t, d, 120, 80, 0.05 * vol);
+      this.burst(t + d * 0.8, 0.035, { f: 2200, q: 6, vol: 0.02 * vol, attack: 0.004 });
       t += d + 0.09;
     }
     this.hold(t - c.currentTime);
   }
 
-  // Toby asleep: slow, quiet, rumbly snores.
-  snore(dur = 4) {
+  // Grumbly Frenchie "talking": a short rising and falling rrr-wuh-wuh, quiet.
+  grumble(vol = 0.6, delay = 0) {
+    if (!this.ctx || !this.catSounds) return;
     const c = this.ctx;
-    const t0 = c.currentTime + 0.02;
-    const breaths = Math.max(1, Math.round(dur / 2.4));
+    const t = c.currentTime + 0.02 + delay;
+    const d = 0.6 + Math.random() * 0.25;
+    const f0 = 150 + Math.random() * 30;
+    const o = c.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.linearRampToValueAtTime(f0 * 1.5, t + d * 0.32);
+    o.frequency.linearRampToValueAtTime(f0 * 1.1, t + d * 0.6);
+    o.frequency.linearRampToValueAtTime(f0 * 1.35, t + d * 0.75);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.85, t + d);
+    // the growl: a rough ~30 Hz wobble
+    const am = c.createGain();
+    am.gain.value = 0.55;
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 28 + Math.random() * 6;
+    const lg = c.createGain();
+    lg.gain.value = 0.45;
+    lfo.connect(lg).connect(am.gain);
+    const F1 = c.createBiquadFilter();
+    F1.type = 'bandpass'; F1.Q.value = 4;
+    F1.frequency.setValueAtTime(500, t);
+    F1.frequency.linearRampToValueAtTime(820, t + d * 0.35);
+    F1.frequency.linearRampToValueAtTime(520, t + d);
+    const F2 = c.createBiquadFilter();
+    F2.type = 'bandpass'; F2.Q.value = 6; F2.frequency.value = 1250;
+    const g2 = c.createGain();
+    g2.gain.value = 0.4;
+    const env = c.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.1 * vol, t + 0.07);
+    env.gain.setValueAtTime(0.1 * vol, t + d * 0.7);
+    env.gain.exponentialRampToValueAtTime(0.0005, t + d);
+    o.connect(am);
+    am.connect(F1).connect(env);
+    am.connect(F2).connect(g2).connect(env);
+    env.connect(this.sfxBus);
+    o.start(t); lfo.start(t);
+    o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
+    this.burst(t + d, 0.14, { f: 700, f2: 350, q: 1.5, vol: 0.03 * vol }); // and a little snuff to finish
+    this.hold(delay + d + 0.2);
+  }
+
+  // A contented "hmph" through the nose as he flops down.
+  huff() {
+    if (!this.ctx || !this.catSounds) return;
+    const t = this.ctx.currentTime + 0.02;
+    this.burst(t, 0.34, { f: 720, f2: 300, q: 0.9, vol: 0.06, attack: 0.015 });
+    this.grunt(t, 0.2, 95, 70, 0.025);
+    this.hold(0.4);
+  }
+
+  // "h… h… pfft!" then a snort: the head snaps down on the burst, 0.42 s in.
+  sneeze() {
+    if (!this.ctx || !this.catSounds) return;
+    const t = this.ctx.currentTime + 0.02;
+    this.burst(t, 0.14, { f: 1200, f2: 1600, vol: 0.018, attack: 0.1 });
+    this.burst(t + 0.2, 0.16, { f: 1300, f2: 1800, vol: 0.026, attack: 0.12 });
+    this.burst(t + 0.42, 0.2, { f: 2600, f2: 1100, q: 0.7, vol: 0.065, attack: 0.004 });
+    this.burst(t + 0.42, 0.12, { type: 'lowpass', f: 420, vol: 0.05, attack: 0.004 });
+    this.burst(t + 0.78, 0.15, { f: 820, f2: 400, q: 3, vol: 0.045, flutter: 60, depth: 0.5 });
+    this.hold(1);
+  }
+
+  // The shake-off: ears and jowls flapping, fast then slowing, and a snuff at the end.
+  shakeOff() {
+    if (!this.ctx || !this.catSounds) return;
+    const t = this.ctx.currentTime + 0.02;
+    for (let i = 0; i < 8; i++) {
+      this.burst(t + 0.12 + i * 0.105 + i * i * 0.003, 0.07, { type: 'lowpass', f: 380, q: 0.7, vol: 0.12 * (1 - i / 10), attack: 0.005 });
+    }
+    this.burst(t + 1.05, 0.16, { f: 800, f2: 350, q: 3, vol: 0.04, flutter: 55, depth: 0.5 });
+    this.hold(1.25);
+  }
+
+  // Toby asleep or flopped: a wet, snuffly snore. Each breath is a fluttering, rattly inhale
+  // through a squashed nose, a lip-flapping "puh" out, and now and then a wet snuffle.
+  snore(dur = 4) {
+    if (!this.ctx || !this.catSounds) return;
+    const c = this.ctx;
+    let t = c.currentTime + 0.02;
+    const end = t + dur;
     this.hold(dur);
-    for (let i = 0; i < breaths; i++) {
-      const t = t0 + i * 2.4;
-      const d = 1.1;
-      const src = c.createBufferSource();
-      src.buffer = this.noiseBuf;
-      const lp = c.createBiquadFilter();
-      lp.type = 'lowpass'; lp.frequency.value = 420; lp.Q.value = 4;
-      const rattle = c.createGain();
-      const lfo = c.createOscillator();
-      lfo.frequency.value = 32;
-      const lfoG = c.createGain();
-      lfoG.gain.value = 0.6;
-      rattle.gain.value = 0.4;
-      lfo.connect(lfoG).connect(rattle.gain);
-      const env = c.createGain();
-      env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(0.09, t + d * 0.6);
-      env.gain.linearRampToValueAtTime(0, t + d);
-      src.connect(lp).connect(rattle).connect(env).connect(this.master);
-      src.start(t, Math.random()); src.stop(t + d + 0.05);
-      lfo.start(t); lfo.stop(t + d + 0.05);
+    while (t < end) {
+      const k = 0.85 + Math.random() * 0.3; // no two breaths quite alike
+      this.burst(t, 1.0 * k, { f: 300, f2: 470, q: 1.4, vol: 0.07, attack: 0.55 * k, flutter: 26 + Math.random() * 6, depth: 0.85, out: this.master });
+      this.grunt(t + 0.3, 0.7 * k, 70, 86, 0.016, this.master);
+      if (Math.random() < 0.5) {
+        for (const dt of [0.82, 0.9]) this.burst(t + dt * k, 0.035, { f: 1900, q: 5, vol: 0.012, attack: 0.004 });
+      }
+      this.burst(t + 1.15 * k, 0.55, { f: 650, f2: 420, q: 2, vol: 0.035, attack: 0.04, flutter: 48, depth: 0.5, out: this.master });
+      t += 2.5 * k;
     }
   }
 

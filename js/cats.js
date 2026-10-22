@@ -4,7 +4,7 @@
 // procedural rig can later be swapped for pre-rendered video clips (see ASSETS.md).
 import { lerp, clamp, rand, pick, softShadow, noise1, rr, makeCanvas } from './util.js';
 import { SPOTS, FLOOR_LANE, VIEW, floorScale } from './scene.js';
-import { CAT_DEFS, TOBY, ANIMAL_DEFS, POSE_FLAT, unflat, drawCat, applyTurn, shapeFor } from './catArt.js';
+import { CAT_DEFS, TOBY, ANIMAL_DEFS, posesFor, unflat, drawCat, applyTurn, shapeFor, wagTail } from './catArt.js';
 import { ClipCatRenderer, preloadClipSets } from './clipCat.js';
 
 export const CAT_SCALE = 1.2;          // cats read clearly from the back of a classroom
@@ -45,7 +45,27 @@ const NEXT = {
 const ALWAYS_OK = new Set(['sit', 'look', 'yawn', 'wake', 'groom']);
 const DURATION = {
   sit: [7, 14], groom: [4, 7], look: [3, 6], yawn: [1.6, 1.8], loaf: [12, 26], sleep: [30, 75], wake: [2.5, 4],
+  tilt: [2.6, 4], scratch: [2.2, 3], shake: [1.35, 1.4], sneeze: [1.2, 1.3],
 };
+// Toby's day instead: head tilts, ear scratches, shake-offs and sneezes; no grooming. He flops
+// into a frog splat (his 'loaf') and sleeps on his back.
+const DOG_NEXT = {
+  sit: ['tilt', 'tilt', 'scratch', 'loaf', 'sit', 'sneeze', 'yawn', 'look'],
+  tilt: ['sit', 'sit', 'tilt'],
+  scratch: ['shake', 'shake', 'sit'],
+  shake: ['sit'],
+  sneeze: ['sit', 'shake'],
+  look: ['sit', 'tilt'],
+  yawn: ['sit', 'loaf'],
+  loaf: ['sleep', 'sleep', 'loaf', 'sit'],
+  sleep: ['wake'],
+  wake: ['yawn', 'loaf', 'loaf'],
+  nuzzle: ['sit'],
+  alert: ['sit', 'tilt'],
+  wag: ['sit'],
+};
+const DOG_OK = new Set([...ALWAYS_OK, 'tilt', 'scratch', 'shake', 'sneeze']);
+const DOG_STEP = 6.4; // a Frenchie's shorter stride: rig units per radian of walk cycle (cats 8.9)
 
 class Cat {
   constructor(def, world) {
@@ -56,7 +76,9 @@ class Cat {
     this.dir = 1; this.dirVis = 1;
     this.turnRate = 6;
     this.poseName = 'walk';
-    this.cur = POSE_FLAT.walk.slice();
+    this.poses = posesFor(def);
+    this.cur = this.poses.walk.slice();
+    this.lastPose = 'walk'; this.poseStart = 0; // when the current pose began, for one-shot moves
     this.walkPhase = Math.random() * 6; this.walkAmt = 0;
     this.gait = rand(0.88, 1.1);
     this.queue = [];
@@ -80,7 +102,7 @@ class Cat {
   }
 
   // --- action queue ----------------------------------------------------------
-  walkTo(x, y, opts = {}) { this.queue.push({ type: 'walk', x, y, speed: (opts.speed || WALK_SPEED) * this.gait, inPlace: !!opts.inPlace }); }
+  walkTo(x, y, opts = {}) { this.queue.push({ type: 'walk', x, y, speed: (opts.speed || WALK_SPEED) * this.gait, inPlace: !!opts.inPlace, sniff: !!opts.sniff }); }
   jumpTo(pt, scale) { this.queue.push({ type: 'jump', x: pt.x, y: pt.y, z: pt.z ?? pt.y, scale }); }
   hold(t, pose, clip) { this.queue.push({ type: 'wait', wait: t, pose, clip }); }
   turn(dir) { this.queue.push({ type: 'turn', dir }); }
@@ -99,7 +121,14 @@ class Cat {
     spot.taken = this;
     const r = spot.route;
     const dist = Math.abs(r[0].x - this.x);
-    if (wander && dist > 450) {
+    if (wander && dist > 450 && isDog(this.def)) {
+      // trot in, then nose along the floor following a smell, and stop with a head tilt
+      const t1 = rand(0.25, 0.4), t2 = t1 + rand(0.11, 0.16);
+      this.walkTo(lerp(this.x, r[0].x, t1), lerp(this.y, r[0].y, t1 * 0.6));
+      this.walkTo(lerp(this.x, r[0].x, t2), lerp(this.y, r[0].y, t2 * 0.6), { sniff: true, speed: 34 });
+      this.hold(rand(1.6, 2.2), 'tilt');
+      this.call(() => this.flick());
+    } else if (wander && dist > 450) {
       // stop part-way for a curious sniff, like a cat exploring a new room
       const mx = lerp(this.x, r[0].x, rand(0.35, 0.6));
       this.walkTo(mx, lerp(this.y, r[0].y, 0.5));
@@ -135,6 +164,8 @@ class Cat {
     }
     this.hold(0.5, 'stand');
     this.hold(rand(1.1, 1.7), 'sniff', 'sniff');
+    // a dog sits and cocks his head at his new spot before flopping down on it
+    if (isDog(this.def) && Math.random() < 0.4) this.hold(rand(1.8, 2.6), 'tilt');
     if (isCosySpot(spot) && Math.random() < 0.85) this.curlUp(0.6);
     else {
       this.turn(spot.facing || this.dir);
@@ -154,13 +185,19 @@ class Cat {
     this.turn(d);
     this.walkTo(spot.x, spot.y, { speed: 26, inPlace: !isFloorSpot(spot) });
     this.turn(spot.facing || d);
-    this.call(() => {
-      this.turnRate = 6;
-      this.clip = 'knead';
-      if (Math.random() < 0.7) this.world.sfx?.purr(this.def.voice, 3.5);
-    });
-    if (isDog(this.def)) this.hold(rand(1.2, 1.8), 'sniff', 'sniff'); // dogs circle and flop, no kneading
-    else this.hold(rand(2.2, 3.2), 'knead', 'knead');
+    if (isDog(this.def)) {
+      // dogs circle, have a last sniff and flop down with a huff: no kneading
+      this.call(() => { this.turnRate = 6; });
+      this.hold(rand(0.7, 1.0), 'sniff', 'sniff');
+      this.call(() => { this.clip = 'flop'; setTimeout(() => this.world.sfx?.huff(), 380); });
+    } else {
+      this.call(() => {
+        this.turnRate = 6;
+        this.clip = 'knead';
+        if (Math.random() < 0.7) this.world.sfx?.purr(this.def.voice, 3.5);
+      });
+      this.hold(rand(2.2, 3.2), 'knead', 'knead');
+    }
     this.hold(1.4, 'loaf');
     this.call(() => {
       this.settledAt = this.world.time;
@@ -178,9 +215,16 @@ class Cat {
     this.hold(rand(1.2, 1.8), 'sit');
     if (Math.random() < 0.5) { this.hold(1.7, 'yawn'); this.hold(0.6, 'sit'); }
     this.hold(0.6, 'stand');
-    this.hold(1.9, 'stretch', 'stretch');
+    this.hold(1.9, 'stretch', 'stretch'); // a dog's stretch is a play bow
+    if (isDog(this.def)) this.shakeOff();
     this.hold(0.5, 'stand');
     this.curlUp(0.75);
+  }
+
+  // the big full-body shake a dog does on getting up
+  shakeOff() {
+    this.call(() => this.world.sfx?.shakeOff());
+    this.hold(1.35, 'shake', 'shake');
   }
 
   rest(pose) {
@@ -193,6 +237,10 @@ class Cat {
     const [a, b] = DURATION[pose] || [8, 14];
     this.restUntil = this.world.time + rand(a, b);
     this.clip = pose === 'sleep' ? 'sleepLoop' : `idle_${pose}`;
+    const sfx = this.world.sfx;
+    if (pose === 'sneeze') sfx?.sneeze(); // its burst lands on the snap of the head
+    else if (pose === 'shake') sfx?.shakeOff();
+    else if (pose === 'tilt' && Math.random() < 0.35) sfx?.grumble(0.45); // a quiet "hrm?"
     if (COSY.has(pose)) this.nextFlick = Math.max(this.nextFlick, rand(10, 30));
     if (pose === 'sleep') {
       this.nextZ = 4; // the clip waits for the loaf's slow blink before it curls up
@@ -212,7 +260,9 @@ class Cat {
     }
     if ((from === 'loaf' || from === 'wake') && !this.world.alert && isCosySpot(spot) &&
       this.world.time - this.settledAt > this.resettleAfter) return this.resettle();
-    const options = (NEXT[from] || ['sit']).filter((p) => (ALWAYS_OK.has(p) || spot.poses.includes(p)) && !(p === 'groom' && isDog(this.def)));
+    const dog = isDog(this.def);
+    const ok = dog ? DOG_OK : ALWAYS_OK;
+    const options = ((dog ? DOG_NEXT : NEXT)[from] || ['sit']).filter((p) => ok.has(p) || spot.poses.includes(p));
     this.setActivity(pick(options.length ? options : ['sit']));
   }
 
@@ -259,13 +309,22 @@ class Cat {
     this.call(() => {
       this.dir = Math.sign(friend.x - this.x) || 1;
       friend.dir = -this.dir;
-      friend.poseName = 'nuzzle';
+      // Toby greets with his whole body; a cat greeting him gets the wag back
+      friend.poseName = isDog(friend.def) ? 'wag' : 'nuzzle';
       this.world.sfx?.trill(this.def.voice);
-      setTimeout(() => this.world.sfx?.purr(friend.def.voice, 4), 700);
+      if (isDog(friend.def)) setTimeout(() => this.world.sfx?.grumble(0.6), 700);
+      else setTimeout(() => this.world.sfx?.purr(friend.def.voice, 4), 700);
       for (let i = 0; i < 3; i++) this.world.addParticle('heart', (this.x + friend.x) / 2, this.y - 150 * this.scale * CAT_SCALE, i * 0.7);
     });
-    this.hold(1.2, 'sniff');
-    this.hold(3.8, 'nuzzle');
+    if (isDog(this.def)) {
+      this.hold(1.0, 'sniff');
+      this.hold(2.4, 'wag');
+      this.hold(1.6, 'bow');
+      this.hold(0.5, 'wag');
+    } else {
+      this.hold(1.2, 'sniff');
+      this.hold(3.8, 'nuzzle');
+    }
     this.call(() => {
       friend.busy = null;
       friend.setActivity('sit');
@@ -304,7 +363,8 @@ class Cat {
         this.hold(1.1, 'alert');
         this.call(() => this.flick());
         this.hold(0.6, 'stand');
-        this.hold(1.9, 'stretch', 'stretch');
+        if (isDog(this.def)) this.shakeOff(); // up, a good shake, and off he trots
+        else this.hold(1.9, 'stretch', 'stretch');
         this.hold(0.5, 'stand');
       }
       if (spot && this.y < 870) {
@@ -346,7 +406,11 @@ class Cat {
     const exit = offstageX(this.def, toLeft ? -1 : 1, lane);
     this.walkTo(this.x + (toLeft ? -30 : 30), lane, { speed: 40 });
     const mid = lerp(this.x, exit, rand(0.3, 0.5));
-    if (Math.abs(exit - this.x) > 500) {
+    if (Math.abs(exit - this.x) > 500 && isDog(this.def)) {
+      // following his nose out of the room
+      this.walkTo(mid, lane, { speed: 52 });
+      this.walkTo(lerp(mid, exit, 0.25), lane, { speed: 34, sniff: true });
+    } else if (Math.abs(exit - this.x) > 500) {
       this.walkTo(mid, lane, { speed: 52 });
       this.hold(rand(1.0, 1.6), 'sniff');
     }
@@ -403,7 +467,9 @@ class Cat {
         if (w.time > this.relaxAt) {
           this.alerted = false;
           this.relaxAt = 0;
-          this.setActivity(this.prevPose === 'sleep' ? 'loaf' : this.prevPose || 'sit');
+          // a one-off move (Toby's shake or sneeze) isn't picked up again
+          const back = this.prevPose === 'sleep' ? 'loaf' : this.prevPose === 'shake' || this.prevPose === 'sneeze' ? 'sit' : this.prevPose;
+          this.setActivity(back || 'sit');
         }
       }
     } else if (this.state !== 'resting') {
@@ -414,7 +480,8 @@ class Cat {
     // pose smoothing (procedural walk cycle is layered on top in draw)
     this.walkAmt = lerp(this.walkAmt, clamp(speed / 25, 0, 1), 1 - Math.exp(-dt * 10));
     const k = 1 - Math.exp(-dt * (this.seg && this.seg.type === 'jump' ? 15 : 5));
-    const target = POSE_FLAT[this.poseName] || POSE_FLAT.sit;
+    const target = this.poses[this.poseName] || this.poses.sit;
+    if (this.poseName !== this.lastPose) { this.lastPose = this.poseName; this.poseStart = w.time; }
     for (let i = 0; i < this.cur.length; i++) this.cur[i] += (target[i] - this.cur[i]) * k;
     this.dirVis = lerp(this.dirVis, this.dir, 1 - Math.exp(-dt * this.turnRate));
 
@@ -467,7 +534,7 @@ class Cat {
       seg.x0 = this.x; seg.y0 = this.y; seg.d = 0; seg.v = 0;
       seg.len = Math.hypot(seg.x - this.x, seg.y - this.y);
       if (seg.len < 1.5) { this.seg = null; return; }
-      this.poseName = 'walk';
+      this.poseName = seg.sniff ? 'sniffWalk' : 'walk';
       if (Math.abs(seg.x - this.x) > 3) this.dir = seg.x > this.x ? 1 : -1;
     } else if (seg.type === 'jump') {
       seg.x0 = this.x; seg.y0 = this.y; seg.z0 = this.z; seg.s0 = this.scale;
@@ -505,7 +572,7 @@ class Cat {
       this.x = lerp(s.x0, s.x, u);
       this.y = lerp(s.y0, s.y, u);
       if (!s.inPlace) { this.z = this.y; this.scale = floorScale(this.y); }
-      this.walkPhase += (s.v * dt) / (8.9 * this.scale * CAT_SCALE * this.def.size);
+      this.walkPhase += (s.v * dt) / ((isDog(this.def) ? DOG_STEP : 8.9) * this.scale * CAT_SCALE * this.def.size);
       if (s.d >= s.len - 0.5) { this.seg = null; this.poseName = 'stand'; }
       return s.v;
     }
@@ -544,19 +611,30 @@ class Cat {
     p.haunch[3] *= 1 + breathe * 0.6;
     p.chest[3] *= 1 + breathe;
     p.head[1] -= breathe * 22;
-    const sway = noise1(t * 0.55 + this.def.name.length * 3) - 0.5;
-    const swish = this.state === 'resting' && !sleepy ? 1 : 0.35;
-    p.tail[4] += sway * 18 * swish; p.tail[5] += sway * 8 * swish;
-    p.tail[6] += sway * 26 * swish; p.tail[7] += Math.sin(t * 1.3) * 4 * swish;
+    const dog = isDog(this.def);
+    if (!dog) {
+      const sway = noise1(t * 0.55 + this.def.name.length * 3) - 0.5;
+      const swish = this.state === 'resting' && !sleepy ? 1 : 0.35;
+      p.tail[4] += sway * 18 * swish; p.tail[5] += sway * 8 * swish;
+      p.tail[6] += sway * 26 * swish; p.tail[7] += Math.sin(t * 1.3) * 4 * swish;
+    }
 
     if (this.walkAmt > 0.01) {
       const ph = this.walkPhase;
       const offs = [Math.PI, 0, 0, Math.PI]; // FF, BF, FN, BN
+      const stride = dog ? 10 : 14, lift = dog ? 7 : 9; // short Frenchie legs: quick little steps
       p.legs.forEach((l, i) => {
         const a = ph + offs[i];
-        l[2] += Math.sin(a) * 14 * this.walkAmt;
-        l[3] -= Math.max(0, Math.cos(a)) * 9 * this.walkAmt;
+        l[2] += Math.sin(a) * stride * this.walkAmt;
+        l[3] -= Math.max(0, Math.cos(a)) * lift * this.walkAmt;
       });
+      if (dog) {
+        // a bouncy trot with a rolling waddle through the hips
+        const wa = this.walkAmt, b = Math.abs(Math.sin(ph)) * 2.6 * wa;
+        p.body[1] -= b; p.chest[1] -= b; p.haunch[1] -= b * 0.8; p.head[1] -= b * 0.9;
+        p.haunch[0] += Math.sin(ph) * 2.5 * wa; p.body[4] += Math.sin(ph) * 0.04 * wa;
+        p.head[3] += Math.sin(ph) * 0.05 * wa;
+      }
       // weight shifts: shoulders and hips rise alternately, head bobs a beat behind
       const hip = Math.sin(ph) * 2.2 * this.walkAmt;
       p.haunch[1] -= Math.abs(hip);
@@ -581,8 +659,71 @@ class Cat {
     }
     if (this.wiggle) p.haunch[0] += Math.sin(t * 16) * 3;
     if (this.attending) p.head[3] += Math.sin(t * 0.4 + this.age) * 0.05; // the odd curious head tilt
+    if (dog) this.dogMotion(p, t, this.world.time - this.poseStart);
     // face the room while paying attention: the rig's turn pulled toward face-on
     return applyTurn(p, this.dirVis * (1 - this.front));
+  }
+
+  // Toby's own moves on top of his pose: the stub tail wag, the whole-body wiggle, shake-offs,
+  // sneezes and ear scratches. lt = seconds since the pose began (one-shot moves follow it).
+  dogMotion(p, t, lt) {
+    let wag = 0;
+    switch (this.poseName) {
+      case 'walk': wag = Math.sin(this.walkPhase * 2) * 0.5; break;
+      case 'sniffWalk': wag = Math.sin(this.walkPhase * 2) * 0.4; p.head[1] += Math.sin(t * 12) * 1.4; p.head[0] += Math.sin(t * 3) * 2; break;
+      case 'stand': case 'sit': case 'look': case 'alert': case 'nuzzle': wag = Math.sin(t * 7) * 0.25; break;
+      case 'tilt': p.head[3] += Math.sin(lt * 1.3) * 0.06; wag = Math.sin(t * 5) * 0.15; break;
+      case 'attend': p.head[3] += Math.sin(t * 0.9 + this.age) * 0.16; wag = Math.sin(t * 6) * 0.2; break;
+      case 'wag': {
+        const w = Math.sin(lt * 11);
+        p.haunch[0] += w * 6; p.body[0] += w * 2; p.body[4] += w * 0.06; p.head[3] += Math.sin(lt * 11 + 1) * 0.05;
+        wag = Math.sin(lt * 22) * 0.8;
+        break;
+      }
+      case 'bow': case 'stretch':
+        p.haunch[1] -= Math.abs(Math.sin(lt * 5)) * 3; p.haunch[0] += Math.sin(lt * 10) * 3;
+        wag = Math.sin(lt * 20) * 0.75;
+        break;
+      case 'scratch': {
+        const k = Math.sin(lt * 26);
+        p.legs[3][2] += k * 3; p.legs[3][3] += k * 6; p.head[3] += k * 0.03; p.body[1] += k * 0.6;
+        break;
+      }
+      case 'shake': {
+        const en = Math.sin(clamp(lt / 1.2, 0, 1) * Math.PI), w = lt * 34;
+        p.head[3] += Math.sin(w) * 0.4 * en;
+        p.chest[0] += Math.sin(w - 0.4) * 2 * en; p.body[0] += Math.sin(w - 0.8) * 3.5 * en;
+        p.body[4] += Math.sin(w - 0.8) * 0.06 * en; p.haunch[0] += Math.sin(w - 1.6) * 2.5 * en;
+        wag = Math.sin(w) * 0.6 * en;
+        break;
+      }
+      case 'sneeze': {
+        // head goes up as he winds up ("h… h…"), then snaps down, then shakes it off
+        const up = clamp(lt / 0.42, 0, 1) * (lt < 0.42 ? 1 : 0);
+        const snap = lt >= 0.42 ? Math.exp(-(lt - 0.42) * 5) : 0;
+        p.head[1] += -9 * up + 14 * snap; p.head[0] += 8 * snap;
+        p.head[3] += -0.25 * up + 0.3 * snap;
+        p.face[2] = Math.max(p.face[2], 0.35 * up);
+        break;
+      }
+      case 'sleep':
+        // paws paddle now and then: dreaming of something
+        if (Math.sin(t * 0.37 + this.age) > 0.8) for (const i of [0, 2]) p.legs[i][3] += Math.sin(t * 16 + i) * 3;
+        break;
+      case 'loaf':
+        if (lt < 0.9) { const f = Math.sin(clamp(lt / 0.9, 0, 1) * Math.PI); p.body[3] *= 1 - 0.08 * f; p.haunch[3] *= 1 - 0.06 * f; } // flop
+        break;
+      default: break;
+    }
+    if (wag) wagTail(p, wag);
+  }
+
+  // Ear flaps and head swings for the rig while Toby shakes off.
+  shakeFx() {
+    const lt = this.world.time - this.poseStart;
+    if (this.poseName !== 'shake' || lt > 1.2) return null;
+    const en = Math.sin((lt / 1.2) * Math.PI);
+    return { earFlick: (lt * 4.5) % 1, lookX: Math.sin(lt * 17) * 0.5 * en };
   }
 
   draw(ctx, t) {
@@ -629,11 +770,12 @@ class Cat {
     else {
       const sign = this.dirVis < 0 ? -1 : 1;
       g.setTransform(k * sign, 0, 0, k, SPR.l * k, SPR.t * k);
+      const shake = isDog(this.def) && this.shakeFx();
       drawCat(g, this.def, p, {
         t,
         blink: this.blinkT > 0 ? 0 : 1,
-        lookX: (this.state === 'resting' && !this.alerted) || this.attending ? this.lookX : 0,
-        earFlick: this.flickT >= 0 ? this.flickT : 0,
+        lookX: shake ? shake.lookX : (this.state === 'resting' && !this.alerted) || this.attending ? this.lookX : 0,
+        earFlick: shake ? shake.earFlick : this.flickT >= 0 ? this.flickT : 0,
         alert: this.alertAmt,
       });
     }

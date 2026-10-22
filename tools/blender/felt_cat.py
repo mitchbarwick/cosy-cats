@@ -250,9 +250,10 @@ def flat_material(name, color, *, rough=0.9, emission=0.0, alpha=1.0, coat=0.0, 
     return m
 
 
-def eye_material(iris_hex, rim=(0.02, 0.012, 0.01, 1), glow=0.0):
+def eye_material(iris_hex, rim=(0.02, 0.012, 0.01, 1), glow=0.0, pupil=0.42):
     """Glossy felt-toy eye: radial pupil / iris / rim from the eye's own local coordinates.
-    Dark coats get a little iris glow so the eyes still read against black wool."""
+    Dark coats get a little iris glow so the eyes still read against black wool. `pupil` is the
+    pupil's radius as a fraction of the eye."""
     m = bpy.data.materials.new('Eye')
     m.use_nodes = True
     nt = m.node_tree
@@ -273,8 +274,8 @@ def eye_material(iris_hex, rim=(0.02, 0.012, 0.01, 1), glow=0.0):
     r = ramp.color_ramp
     r.interpolation = 'EASE'
     r.elements[0].position = 0.0; r.elements[0].color = (0.012, 0.008, 0.008, 1)
-    r.elements[1].position = 0.42; r.elements[1].color = (0.012, 0.008, 0.008, 1)
-    for pos, c in ((0.5, lin(shade(iris_hex, -0.35))), (0.72, lin(iris_hex)), (0.86, lin(shade(iris_hex, 0.3))),
+    r.elements[1].position = pupil; r.elements[1].color = (0.012, 0.008, 0.008, 1)
+    for pos, c in ((pupil + 0.08, lin(shade(iris_hex, -0.35))), (0.72, lin(iris_hex)), (0.86, lin(shade(iris_hex, 0.3))),
                    (0.93, rim)):
         e = r.elements.new(pos); e.color = c
     L.new(ln.outputs['Value'], ramp.inputs['Fac'])
@@ -330,6 +331,43 @@ def cone(name, mat, parent, r1, depth, loc=(0, 0, 0), scale=(1, 1, 1)):
     ob.scale = scale
     mod = ob.modifiers.new('round', 'SUBSURF')
     mod.levels = mod.render_levels = 2
+    return ob
+
+
+def bat_ear(name, mat, parent, w, h, d, loc=(0, 0, 0), z0=0.0, rings=16, segs=24):
+    """A French bulldog's bat ear: rings lofted up local z, half-width w at the base tapering to
+    a rounded tip at height h, d thick, with the front (-y) flattened into a shallow cup."""
+    import bmesh
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    rows = []
+    for j in range(rings):
+        t = j / rings
+        dome = math.sqrt(max(0.0, 1 - t ** 2.6))   # full to near the top, then a round tip
+        a, b = w * dome * (1 - 0.38 * t), d * max(dome, 0.05) * (1 - 0.4 * t)
+        row = []
+        for i in range(segs):
+            th = 2 * math.pi * i / segs
+            y = b * math.sin(th)
+            row.append(bm.verts.new((a * math.cos(th), y * (0.35 if y < 0 else 1.0), z0 + h * t)))
+        rows.append(row)
+    tip = bm.verts.new((0, 0, z0 + h))
+    for j in range(rings - 1):
+        for i in range(segs):
+            bm.faces.new((rows[j][i], rows[j][(i + 1) % segs], rows[j + 1][(i + 1) % segs], rows[j + 1][i]))
+    for i in range(segs):
+        bm.faces.new((rows[-1][i], rows[-1][(i + 1) % segs], tip))
+    bm.faces.new(list(reversed(rows[0])))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    for p in me.polygons:
+        p.use_smooth = True
+    me.materials.append(mat)
+    ob = link(bpy.data.objects.new(name, me), parent)
+    ob.location = loc
+    mod = ob.modifiers.new('round', 'SUBSURF')
+    mod.levels = mod.render_levels = 1
     return ob
 
 
@@ -479,6 +517,8 @@ class FeltCat:
         # closed eyes are a thread line: dark on light wool, a pale line on black wool so it still reads
         m_lid = flat_material('Lid', lighten(fur, 0.38) if dark else '#3a2620', rough=0.8)
         eye_kw = dict(rim=lin(lighten(fur, 0.12)), glow=0.35) if dark else {}
+        if dog:
+            eye_kw['pupil'] = 0.32   # a dog's round pupil leaves a ring of yellow iris showing
         m_eyes = {-1: eye_material(d.get('eye2') or d['eye'], **eye_kw), 1: eye_material(d['eye'], **eye_kw)}
         ear_mats = {s: (m_head if c is None else felt_material(f'EarFur{s}', wool(c), **dk))
                     for s, c in zip((-1, 1), look['ears'])}
@@ -560,10 +600,11 @@ class FeltCat:
         for s in (-1, 1):
             piv = empty(f'Ear{s}', H)
             if dog:
-                # big rounded bat ears standing up from the sides of the skull
-                piv.location = (s * 0.6, -0.02, 0.58)
-                sphere(f'EarOuter{s}', ear_mats[s], piv, (0, 0, 0.4), (0.5, 0.14, 0.56))
-                sphere(f'EarInner{s}', m_inner, piv, (0, -0.1, 0.42), (0.33, 0.05, 0.4))
+                # big upright bat ears: wide at the base, tapering to a softly rounded tip, cupped
+                # in front with a pink lining
+                piv.location = (s * 0.56, -0.02, 0.58)
+                bat_ear(f'EarOuter{s}', ear_mats[s], piv, 0.54, 1.18, 0.14, z0=-0.1)
+                bat_ear(f'EarInner{s}', m_inner, piv, 0.35, 0.94, 0.04, loc=(0, -0.06, 0.0), z0=-0.02)
             else:
                 piv.location = (s * 0.5, -0.05, 0.48)
                 cone(f'EarOuter{s}', ear_mats[s], piv, 0.4, 0.82, scale=(1, 0.5, 1))
@@ -842,7 +883,7 @@ class FeltCat:
         flick = math.sin(min(1, max(0, fr['earFlick'])) * math.pi)
         perk = fr['alert']
         for s, piv in self.ears:
-            out = (0.62 if self.dog else 0.38) - perk * 0.14 + (flick * 0.55 if s > 0 else 0)   # tip away from the centre line
+            out = (0.4 if self.dog else 0.38) - perk * 0.14 + (flick * 0.55 if s > 0 else 0)   # tip away from the centre line
             fwd = -0.12 + perk * 0.22 - (flick * 0.35 if s > 0 else 0)     # + tips toward the face
             piv.rotation_euler = Euler((fwd, s * out, 0))
 

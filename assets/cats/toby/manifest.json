@@ -11,7 +11,7 @@
   ],
   "pxPerUnit": 1.5,
   "fps": 24,
-  "walkSpeed": 55.92,
+  "walkSpeed": 40.21,
   "formats": [
     "webm"
   ],
@@ -32,20 +32,12 @@
       "frames": 96,
       "loop": true
     },
-    "groom": {
-      "frames": 48,
-      "loop": true
-    },
     "loaf": {
       "frames": 96,
       "loop": true
     },
     "sleepLoop": {
       "frames": 144,
-      "loop": true
-    },
-    "knead": {
-      "frames": 32,
       "loop": true
     },
     "nuzzle": {
@@ -57,9 +49,6 @@
     },
     "circle": {
       "frames": 60
-    },
-    "settle": {
-      "frames": 36
     },
     "wake": {
       "frames": 48
@@ -73,15 +62,6 @@
     "stretch": {
       "frames": 46
     },
-    "crouch": {
-      "frames": 17
-    },
-    "jump": {
-      "frames": 15
-    },
-    "land": {
-      "frames": 9
-    },
     "attend": {
       "frames": 20
     },
@@ -89,8 +69,34 @@
       "frames": 72,
       "loop": true
     },
-    "bat": {
-      "frames": 12
+    "sniffWalk": {
+      "frames": 24,
+      "loop": true
+    },
+    "flop": {
+      "frames": 18
+    },
+    "bow": {
+      "frames": 24,
+      "loop": true
+    },
+    "wag": {
+      "frames": 24,
+      "loop": true
+    },
+    "tilt": {
+      "frames": 72,
+      "loop": true
+    },
+    "scratch": {
+      "frames": 16,
+      "loop": true
+    },
+    "shake": {
+      "frames": 30
+    },
+    "sneeze": {
+      "frames": 28
     }
   }
 }

@@ -30,7 +30,7 @@ export const CAT_DEFS = [
 
 // Toby, a white French bulldog: the last visitor, who only comes once every cat is here.
 export const TOBY = {
-  name: 'Toby', species: 'dog', fur: '#f7f3ec', belly: '#ffffff', pattern: 'solid', eye: '#4a3328',
+  name: 'Toby', species: 'dog', fur: '#f7f3ec', belly: '#ffffff', pattern: 'solid', eye: '#f0b429',
   acc: { type: 'collar', color: '#4f72a0' }, size: 1.12, voice: { dog: true, pitch: 150, len: 0.4, bright: 1 },
 };
 export const ANIMAL_DEFS = [...CAT_DEFS, TOBY];
@@ -135,6 +135,73 @@ function clonePose(src, fn) {
   return p;
 }
 
+// ---------------------------------------------------------------------------
+// Dog poses: Toby keeps the cats' pose names where the behaviour is the same idea (sit, loaf,
+// sleep, attend…) but holds them like a French bulldog, plus a few things only a dog does.
+// shapeFor() then gives him his stocky build and stub tail.
+// ---------------------------------------------------------------------------
+const D = { ...P };
+// upright puppy sit: chest out, near back leg splayed forward
+D.sit = {
+  haunch: [-10, -32, 38, 32], body: [0, -58, 27, 36, -0.2], chest: [14, -64, 26, 30], head: [18, -112, 35, 0],
+  legs: [[8, -50, 8, -5, 13, 1], [-26, -14, -14, -5, 12, 0], [20, -50, 24, -5, 14, 1], [-14, -20, 0, -5, 14, 1]],
+  tail: [-46, -16, -66, -14, -76, -10, -84, -6, 13, 0], face: [0.3, 1],
+};
+D.walk = clonePose(P.walk, (p) => { p.head = [54, -84, 33, 0]; p.tail = [-56, -64, -78, -76, -92, -80, -104, -82, 12, 0]; });
+D.stand = clonePose(D.walk, (p) => { p.head = [56, -90, 33, 0]; p.face = [0.5, 1]; });
+// nose down along the floor while trotting in
+D.sniffWalk = clonePose(D.walk, (p) => { p.head = [62, -54, 33, 0.28]; p.chest = [30, -50, 25, 25]; p.face = [0.75, 0.7]; });
+D.sniff = clonePose(D.sniffWalk, (p) => { p.head = [64, -48, 33, 0.32]; });
+// the frog splat: flat on his belly, back legs straight out behind, chin up
+D.loaf = {
+  haunch: [-24, -22, 30, 22], body: [0, -24, 46, 22, 0], chest: [26, -24, 26, 22], head: [48, -54, 33, 0],
+  legs: [[34, -12, 54, -5, 11, 1], [-30, -12, -74, -6, 11, 1], [40, -12, 60, -5, 12, 1], [-32, -12, -80, -6, 12, 1]],
+  tail: [-50, -28, -60, -36, -66, -40, -72, -44, 12, 0], face: [0.3, 1],
+};
+D.wake = clonePose(D.loaf, (p) => { p.head = [46, -50, 33, 0.1]; p.face = [0.3, 0.5]; });
+// fast asleep on his back, paws in the air, head rolled to one side
+D.sleep = {
+  haunch: [-22, -26, 30, 24], body: [0, -28, 44, 24, 0], chest: [24, -28, 26, 22], head: [46, -34, 32, 1.05],
+  legs: [[24, -38, 32, -64, 11, 1], [-24, -34, -18, -60, 11, 1], [30, -38, 42, -62, 12, 1], [-30, -36, -28, -64, 12, 1]],
+  tail: [-52, -22, -62, -18, -70, -14, -78, -10, 12, 0], face: [0.2, 0],
+};
+// play bow: elbows down, rump up, grinning at whoever he wants to play with
+D.bow = {
+  haunch: [-34, -60, 28, 26], body: [0, -44, 44, 22, 0.42], chest: [30, -26, 25, 20], head: [56, -44, 33, -0.15],
+  legs: [[26, -22, 58, -5, 12, 1], [-28, -52, -30, -4, 12, 1], [32, -22, 68, -5, 13, 1], [-34, -52, -38, -4, 13, 1]],
+  tail: [-58, -72, -66, -86, -70, -96, -74, -106, 12, 0], face: [0.45, 1, 0.5],
+};
+D.stretch = D.bow;
+// whole-body wag: standing tall, mouth open, the wiggle is animated
+D.wag = clonePose(D.stand, (p) => { p.head = [56, -94, 33, -0.05]; p.face = [0.45, 1, 0.45]; });
+D.shake = D.stand;
+D.alert = clonePose(D.sit, (p) => { p.head = [18, -118, 35, -0.1]; p.face = [0.05, 1]; });
+D.look = clonePose(D.sit, (p) => { p.face = [0, 1]; });
+D.yawn = clonePose(D.sit, (p) => { p.head = [14, -112, 35, -0.2]; p.face = [0.2, 0, 1]; });
+D.nuzzle = clonePose(D.sit, (p) => { p.head = [32, -104, 35, 0.15]; p.face = [0.7, 0.6]; });
+// "hm?": the curious head tilt
+D.tilt = clonePose(D.sit, (p) => { p.head = [18, -114, 35, 0.4]; p.face = [0.1, 1]; });
+// scratching an ear with a back foot, eyes half shut
+D.scratch = clonePose(D.sit, (p) => {
+  p.body = [0, -56, 28, 36, -0.3]; p.head = [16, -104, 35, 0.34];
+  p.legs[3] = [-8, -30, 18, -86, 14, 1];
+  p.face = [0.4, 0.3, 0.25];
+});
+// a sneeze: eyes screwed shut
+D.sneeze = clonePose(D.sit, (p) => { p.face = [0.35, 0]; }); // the wind-up and snap are animated
+// paying attention: sitting tall facing the room, head cocked
+D.attend = clonePose(D.sit, (p) => { p.head = [14, -116, 35, 0.18]; p.face = [0, 1]; });
+
+// Swing a tail round its base (a dog's stub tail wags; a rotation survives shapeFor's shrink).
+export function wagTail(p, a) {
+  const [bx, by] = p.tail, c = Math.cos(a), s = Math.sin(a);
+  for (const i of [2, 4, 6]) {
+    const x = p.tail[i] - bx, y = p.tail[i + 1] - by;
+    p.tail[i] = bx + x * c - y * s; p.tail[i + 1] = by + x * s + y * c;
+  }
+  return p;
+}
+
 export const POSE_NAMES = Object.keys(P);
 
 // Flatten / unflatten so poses can be smoothed numerically.
@@ -172,6 +239,9 @@ export function applyTurn(p, f) {
   return p;
 }
 export const POSE_FLAT = Object.fromEntries(Object.entries(P).map(([k, v]) => [k, flat(v)]));
+export const DOG_POSE_FLAT = Object.fromEntries(Object.entries(D).map(([k, v]) => [k, flat(v)]));
+// the pose table an animal is drawn from
+export const posesFor = (def) => (def.species === 'dog' ? DOG_POSE_FLAT : POSE_FLAT);
 
 // ---------------------------------------------------------------------------
 // Drawing helpers
@@ -475,6 +545,17 @@ function drawBodyPattern(ctx, def, p) {
   }
 }
 
+// A French bulldog's bat ear, base centred on the origin, pointing up (-y) to a rounded tip.
+function batEar(ctx, w, h) {
+  ctx.beginPath();
+  ctx.moveTo(-w, 0);
+  ctx.bezierCurveTo(-w * 1.02, -h * 0.45, -w * 0.72, -h * 0.8, -w * 0.4, -h * 0.94);
+  ctx.bezierCurveTo(-w * 0.18, -h * 1.04, w * 0.18, -h * 1.04, w * 0.4, -h * 0.94);
+  ctx.bezierCurveTo(w * 0.72, -h * 0.8, w * 1.02, -h * 0.45, w, 0);
+  ctx.quadraticCurveTo(0, h * 0.2, -w, 0);
+  ctx.closePath();
+}
+
 function drawHead(ctx, def, p, o) {
   const [hx, hy, r, tilt] = p.head;
   const turn = clamp(p.face[0] + o.lookX, -1, 1);
@@ -494,18 +575,20 @@ function drawHead(ctx, def, p, o) {
   const perk = o.alert || 0;
   const dog = def.species === 'dog';
   if (dog) {
-    // big upright bat ears with rounded tips
+    // big upright bat ears: wide at the base, tapering to a softly rounded point
     for (const s of [-1, 1]) {
-      const ex = hx + earShift + s * r * 0.7;
-      const ey = hy - r * (0.9 + perk * 0.05);
-      const rot = s * (0.34 - perk * 0.1) + (s > 0 ? flick * 0.45 : 0);
+      const ex = hx + earShift + s * r * 0.6;
+      const ey = hy - r * (0.6 + perk * 0.05);
+      const rot = s * (0.3 - perk * 0.1) + (s > 0 ? flick * 0.45 : 0);
       ctx.save();
       ctx.translate(ex, ey); ctx.rotate(rot);
-      ctx.beginPath(); ctx.ellipse(0, 0, r * 0.42, r * 0.5, 0, 0, Math.PI * 2);
+      batEar(ctx, r * 0.48, r * 1.04);
       fuzzyEdge(ctx, o.outline, o.ow);
       ctx.fillStyle = fur; ctx.fill();
       ctx.fillStyle = 'rgba(240,165,165,0.9)';
-      ctx.beginPath(); ctx.ellipse(0, r * 0.06, r * 0.26, r * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.translate(0, -r * 0.04);
+      batEar(ctx, r * 0.29, r * 0.82);
+      ctx.fill();
       ctx.restore();
     }
   }
@@ -626,7 +709,8 @@ function drawHead(ctx, def, p, o) {
       ctx.fillStyle = linear(ctx, 0, eyeY - ry, 0, eyeY + ry, [[0, shade(iris, -0.35)], [0.6, iris], [1, shade(iris, 0.35)]]);
       ctx.fillRect(ex - rx, eyeY - ry, rx * 2, ry * 2);
       ctx.fillStyle = '#1d1412';
-      ctx.beginPath(); ctx.ellipse(ex + turn * rx * 0.15, eyeY + ry * 0.05, rx * 0.62, ry * 0.86, 0, 0, Math.PI * 2); ctx.fill();
+      const pr = dog ? 0.5 : 0.62; // a dog's round pupil leaves more iris showing
+      ctx.beginPath(); ctx.ellipse(ex + turn * rx * 0.15, eyeY + ry * 0.05, rx * pr, ry * (dog ? 0.62 : 0.86), 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.beginPath(); ctx.arc(ex - rx * 0.28 + turn * 2, eyeY - ry * 0.38, rx * 0.36, 0, Math.PI * 2); ctx.fill();

@@ -33,7 +33,11 @@ All ten cats in `assets/cats/` have a set rendered in Blender by [tools/blender]
 
 Leaving is built from these clips, not one dedicated clip: `wake → yawn → alert → stretch → walk`. The tone is unbothered, never startled.
 
-**Toby** (the French bulldog, `assets/cats/toby/`) uses the same clip list. `felt_cat.py` builds him when the def has `species: 'dog'`, with a broad skull, jowls, a flat muzzle, a black nose, bat ears and no whiskers. `shapeFor()` in `catArt.js` gives him a stocky body and a stub tail in both the rig and the exported poses. He has no `knead` or `groom` in practice, because the behaviour code never asks a dog for them.
+**Toby** (the French bulldog, `assets/cats/toby/`) has his own set (`DOG_CLIPS` in [tools/clip-maker/clips.js](tools/clip-maker/clips.js)), posed from the rig's dog poses (`D` in `catArt.js`). `felt_cat.py` builds him when the def has `species: 'dog'`, with a broad skull, jowls, a flat muzzle, a black nose, yellow eyes, tapered bat ears and no whiskers. `shapeFor()` gives him a stocky body and a stub tail in both the rig and the exported poses.
+
+- The shared names mean the same moment, done like a dog: `walk` is a short-stepped, bouncy trot with a hip waddle and a wiggling stub tail (its own `stride`, so `walkSpeed` differs from the cats'). `loaf` is a frog splat with the back legs out behind, `sleepLoop` is asleep on his back with paws up (and paddling now and then), `stretch` is a play bow, and `attendLoop` cocks his head one way and then the other.
+- His own clips: `sniffWalk` (nose along the floor, played at ground speed like `walk`), `flop` (bridges `sniff`/`stand` → `loaf`), `tilt`, `scratch` (back foot at an ear), `shake`, `sneeze`, `wag` (whole back end wagging, for greetings) and `bow`.
+- He has no `knead`, `groom`, `settle`, `bat`, `crouch`, `jump` or `land`.
 
 ### How the game uses them
 

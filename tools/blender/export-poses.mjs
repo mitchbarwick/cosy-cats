@@ -2,7 +2,7 @@
 // for felt_cat.py to pose the 3D cat from. Usage: node tools/blender/export-poses.mjs <cat> <out.json>
 import { writeFileSync } from 'node:fs';
 import { ANIMAL_DEFS, mottle, shapeFor } from '../../js/catArt.js';
-import { CLIPS, FRAME, ANCHOR, PPU, FPS, STRIDE } from '../clip-maker/clips.js';
+import { clipsFor, FRAME, ANCHOR, PPU, FPS, STRIDE } from '../clip-maker/clips.js';
 
 const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const [cat = 'biscuit', out = 'poses.json'] = process.argv.slice(2);
@@ -10,6 +10,7 @@ const def = ANIMAL_DEFS.find((d) => slug(d.name) === cat);
 if (!def) throw new Error(`No cat called ${cat}`);
 
 const clips = {};
+const CLIPS = clipsFor(def); // Toby has his own set
 for (const [name, c] of Object.entries(CLIPS)) {
   const frames = [];
   for (let i = 0; i < c.frames; i++) {
@@ -22,7 +23,7 @@ for (const [name, c] of Object.entries(CLIPS)) {
   }
   clips[name] = { loop: !!c.loop, frames };
 }
-const walkSpeed = +(STRIDE / (CLIPS.walk.frames / FPS)).toFixed(2);
+const walkSpeed = +((CLIPS.walk.stride || STRIDE) / (CLIPS.walk.frames / FPS)).toFixed(2);
 // tortie blobs come from the rig's own seeded generator, so both renderers share one coat
 const look = def.pattern === 'tortie' ? { ...def, mottle: mottle(def) } : def;
 writeFileSync(out, JSON.stringify({ cat, def: look, frame: FRAME, anchor: ANCHOR, pxPerUnit: PPU, fps: FPS, walkSpeed, clips }));

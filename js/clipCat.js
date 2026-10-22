@@ -16,12 +16,16 @@ const FALLBACK = {
   knead: 'loaf', stretch: 'stand', crouch: 'stand', jump: 'stand', land: 'stand',
   turn: null, circle: null, settle: null,
   attendLoop: 'sit', attend: null,
+  // Toby's own clips
+  sniffWalk: 'walk', tilt: 'sit', scratch: 'sit', sneeze: 'sit', shake: 'stand', wag: 'stand', bow: 'stand', flop: null,
 };
 const POSE_CLIP = {
   stand: 'stand', walk: 'walk', sniff: 'sniff', sit: 'sit', look: 'sit', groom: 'groom', yawn: 'yawn',
   loaf: 'loaf', sleep: 'sleepLoop', wake: 'wake', nuzzle: 'nuzzle', alert: 'alert', stretch: 'stretch',
   knead: 'knead', crouch: 'crouch', bat: 'bat', jump: 'jump', attend: 'attendLoop',
+  tilt: 'tilt', scratch: 'scratch', sneeze: 'sneeze', shake: 'shake', wag: 'wag', bow: 'bow',
 };
+const WALKS = new Set(['walk', 'sniffWalk']); // played at the ground speed
 // In-between clips played when one clip follows another. `from` is where to start (a fraction
 // of the clip, or 'here' for where the outgoing clip is); `reverse` steps it backwards, so
 // `wake` run back from its end is the cat lowering its head and closing its eyes: dozing off.
@@ -30,10 +34,13 @@ const BRIDGE = {
   'loaf>sleepLoop': { clip: 'wake', from: 0.8, reverse: true },
   'settle>sleepLoop': { clip: 'wake', from: 0.8, reverse: true },
   'wake>sleepLoop': { clip: 'wake', from: 'here', reverse: true },
+  // a dog flops down onto his belly (only Toby has a flop clip)
+  'stand>loaf': { clip: 'flop' },
+  'sniff>loaf': { clip: 'flop' },
 };
 const REVERSE_RATE = 0.7; // clip seconds per second when stepping a clip backwards
 // Resting changes of pose dissolve more slowly than the 0.22 s default, so a dozing cat drifts.
-const REST = new Set(['sit', 'loaf', 'sleepLoop', 'wake', 'groom', 'yawn', 'alert']);
+const REST = new Set(['sit', 'loaf', 'sleepLoop', 'wake', 'groom', 'yawn', 'alert', 'tilt']);
 const REST_FADE = 0.45;
 const SLOW_FADE = { 'loaf>sleepLoop': 0.9, 'wake>loaf': 0.5, 'sit>stand': 0.4 };
 // Without a `wake` clip, loaf → sleep waits for the loaf's slow blink (eyelids closing at u ≈ 0.55–0.64 of the loop),
@@ -173,7 +180,7 @@ export class ClipCatRenderer {
       return { clip: 'land', fit: seg.land };
     }
     if (cat.clip === 'circle' && cat.state === 'settling' && this.has('circle')) return { clip: 'circle', fit: 0 };
-    if (seg && seg.type === 'walk') return { clip: 'walk', fit: 0 };
+    if (seg && seg.type === 'walk') return { clip: cat.poseName === 'sniffWalk' ? 'sniffWalk' : 'walk', fit: 0 };
     if (this.twitch) {
       if (cat.poseName === 'loaf' && !seg) return { clip: 'wake', fit: 0, from: this.set.dur.wake * TWITCH_FROM };
       this.twitch = null;
@@ -245,7 +252,7 @@ export class ClipCatRenderer {
       if (!c.v.seeking && c.shown && c.v.currentTime > to + 0.001) { c.shown = false; c.v.currentTime = to; }
     } else if (c) {
       let rate = 1;
-      if (c.clip === 'walk') {
+      if (WALKS.has(c.clip)) {
         rate = unitSpeed / (this.set.m.walkSpeed || 56);
       } else if (c.fit) rate = this.set.dur[c.clip] / c.fit;
       else if (CYCLE_RATE[c.clip]) {
