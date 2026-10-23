@@ -181,7 +181,9 @@ A full render also writes to the work folder, for checking:
 |---|---|---|
 | `sky.png` | Sky, seen through the window | Night sky, moon, snowy hills, pines and a cottage, lightly blurred. Stars, clouds and snow are still drawn live on top. |
 | `back.png` | Back layer | Wall, wainscot, window frame and sill, curtains, fairy-light wire with bulb caps, and the hanging plant. The window is see-through. Cropped to the view plus a 48 px margin for the drift, like `mid` and `fore`. |
-| `mid.png` | Midground | Floor, rug, bookcase with books, and the chimney breast with fireplace, mantel, candles, clock and painting. |
+| `mid.png` | Midground | Floor, rug, bookcase with books, and the chimney breast with fireplace, mantel, candle tray, clock (without its hands) and painting. |
+| `candles.png` | Drawn in `drawTimekeepers`, on the mid layer | Both candles at full height, lit by the room but not by their own candle lights (so a warm top never slides down the body; the live glow warms them instead). Over a session each burns down by `CANDLE_BURN` (60%) of its height: the top few pixels (wick and rounded lip) are drawn lower by the burn, over what is left of the body. The candle flames in `drawGlow` move down with them. |
+| `hourHand.png`, `minuteHand.png` | Drawn in `drawTimekeepers`, on the mid layer | The clock's hands pointing at 12, turned about the manifest `pivot` (the face's centre). The clock counts the session down to eight o'clock: it reads five past seven at the start, and the minute hand reaches the top as quiet time ends. The brass pin is part of the minute hand. |
 | `armchair.png`, `table.png`, `pouf.png`, `basket.png` | Props, z-sorted with the cats | Each is a cut-out at its manifest `box`, with its own cast shadow baked in. The shadow is measured as the darkening the prop causes on the room behind it. |
 | `lampShade.png` | Drawn in `drawGlow` | The lit lamp shade, drawn after the cats as the canvas shade was. |
 | `fireLogs.png` | Drawn in `drawFire` | The felt logs in front of the live flames. |

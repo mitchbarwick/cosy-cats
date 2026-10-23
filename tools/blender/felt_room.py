@@ -1,8 +1,9 @@
 # Felt room renderer for Cosy Cats. Builds the library as a needle-felt diorama in Blender, to the
 # same plan as the canvas room in js/scene.js (LAYOUT, dumped by room.mjs), and renders it as the
 # game's depth plates: sky, back wall, midground, one cut-out per prop (with its own contact
-# shadow), light layers for the lamp shade and the logs in front of the fire, a blurred
-# foreground, and a small light map that tints the cats.
+# shadow), light layers for the lamp shade and the logs in front of the fire, the candles and
+# the clock's two hands (the game burns and turns these over a session), a blurred foreground,
+# and a small light map that tints the cats.
 #
 #   blender -b --factory-startup --python tools/blender/felt_room.py -- --layout layout.json
 #       --work tmp/ --out assets/room/ [--scale 1] [--samples 64] [--passes back,mid] [--beauty 1]
@@ -1140,14 +1141,17 @@ class Room:
             o = rbox(f'Corbel{k}', m_wood, X(px - 16), X(px + 16), Ys - 0.3, Ys, Zp(mantel + 80, Ys - 0.3), zm - 0.27, bevel=0.1, segs=4)
         # hearth stone: in front of the opening, the hearth cat sits on the floor just in front of it
         rbox('Hearth', felt('Hearth', '#ab9d90', sheen=0.1, var=0.1, bump=0.5, spec=0.05), X(x0 - 30), X(x1 + 30), Yfl(906), Ys, 0, 0.12, bevel=0.04)
-        # candles (flames drawn live) on a brass tray, and a little clock
+        # candles (flames drawn live) on a brass tray, and a little clock. The candles and the
+        # clock's hands are layers of their own: the game burns the candles down and turns the
+        # hands over a session, so they mustn't be baked into the mid plate.
         m_brass = flat('Brass', '#d9b46a', rough=0.32, metallic=0.75, coat=0.3)
         rbox('CandleTray', m_brass, X(1530), X(1592), ymc - 0.12, ymc + 0.12, zm, zm + 0.05, bevel=0.02)
         m_wax = felt('Wax', '#fff4e2', sheen=0.4, var=0.03, bump=0.1, sss=0.4)
-        for i, c in enumerate(self.L['CANDLES']):
-            ztop = Zp(mantel - c['h'], ymc)
-            lathe(f'Candle{i}', m_wax, X(c['x']), ymc, [(0.07, zm + 0.05), (0.07, ztop - 0.01), (0.06, ztop)])
-            tube(f'Wick{i}', flat('WickMat', '#3a2a20', rough=0.8), [(X(c['x']), ymc, ztop), (X(c['x']) + 0.01, ymc, ztop + 0.05)], 0.007, smooth=False)
+        with layer('candles'):
+            for i, c in enumerate(self.L['CANDLES']):
+                ztop = Zp(mantel - c['h'], ymc)
+                lathe(f'Candle{i}', m_wax, X(c['x']), ymc, [(0.07, zm + 0.05), (0.07, ztop - 0.01), (0.06, ztop)])
+                tube(f'Wick{i}', flat('WickMat', '#3a2a20', rough=0.8), [(X(c['x']), ymc, ztop), (X(c['x']) + 0.01, ymc, ztop + 0.05)], 0.007, smooth=False)
         cx = 1820
         yc0 = ymc - 0.18
         case = [(cx - 30, mantel), (cx - 30, mantel - 44)]
@@ -1160,10 +1164,17 @@ class Room:
         face.location = (X(cx), yf + 0.01, Zp(mantel - 46, yf))
         rim = tube('ClockRim', m_brass, [(X(cx) + 0.22 * math.cos(a), yf, Zp(mantel - 46, yf) + 0.22 * math.sin(a))
                                          for a in np.linspace(0, 2 * math.pi, 33)], 0.018, smooth=False)
+        # the hands point at 12; the game turns each about the face's centre (manifest 'pivot')
         m_hand = flat('Hand', '#3a2a20', rough=0.6)
         zc = Zp(mantel - 46, yf)
-        tube('HandH', m_hand, [(X(cx), yf - 0.02, zc), (X(cx + 7), yf - 0.02, zc + 0.06)], 0.012, smooth=False)
-        tube('HandM', m_hand, [(X(cx), yf - 0.025, zc), (X(cx - 2), yf - 0.025, zc + 0.16)], 0.009, smooth=False)
+        self.clock_pivot = proj((X(cx), yf - 0.02, zc))
+        with layer('hourHand'):
+            tube('HandH', m_hand, [(X(cx), yf - 0.02, zc - 0.03), (X(cx), yf - 0.02, zc + 0.05), (X(cx), yf - 0.02, zc + 0.11)],
+                 0.013, radii=[0.8, 1.2, 0.5], smooth=False)
+        with layer('minuteHand'):
+            tube('HandM', m_hand, [(X(cx), yf - 0.03, zc - 0.04), (X(cx), yf - 0.03, zc + 0.06), (X(cx), yf - 0.03, zc + 0.175)],
+                 0.01, radii=[0.8, 1.1, 0.45], smooth=False)
+            ell('ClockPin', m_brass, (X(cx), yf - 0.04, zc), (0.022, 0.012, 0.022))
         # the landscape painting over the mantel, on the chimney breast
         self.painting(1590, 210, 220, 200, Ybr)
 
@@ -1703,9 +1714,10 @@ def lights(room):
         # the fire's glow spilling out of the opening and wrapping round the chair and the rug
         add_light('FireGlow', 'AREA', energy=520, color=(1.0, 0.55, 0.26), loc=(X((op['x0'] + op['x1']) / 2), Ys - 0.15, 0.7),
                   at=(cxp - 0.5, 16.0, 1.2), size=(1.5, 1.0))
-        for i, c in enumerate(L['CANDLES']):
-            add_light(f'Candle{i}', 'POINT', energy=6, color=(1.0, 0.7, 0.4),
-                      loc=(X(c['x']), room.mantel_y, Zp(L['FIRE']['mantel'] - c['h'] - 8, room.mantel_y)), radius=0.03)
+        with layer('candlelight'):
+            for i, c in enumerate(L['CANDLES']):
+                add_light(f'Candle{i}', 'POINT', energy=6, color=(1.0, 0.7, 0.4),
+                          loc=(X(c['x']), room.mantel_y, Zp(L['FIRE']['mantel'] - c['h'] - 8, room.mantel_y)), radius=0.03)
         yw = room.Yw - 0.66
         for i, p in enumerate(L['FAIRY']):
             add_light(f'Fairy{i}', 'POINT', energy=4.0, color=(1.0, 0.8, 0.55), loc=(X(p['x']), yw, Zp(p['y'] + 5, yw)), radius=0.05, shadow=False)
@@ -1762,13 +1774,25 @@ PASSES = {
     'fore': ({'fore'}, set(), {'room', 'forelight'}),
     'shade': ({'shade'}, {'back', 'mid', 'prop:table'}, {'room'}),
     'logs': ({'logs'}, {'back', 'mid'}, {'room'}),
-    'beauty': ({'back', 'mid', 'logs', 'shade', 'prop:armchair', 'prop:table', 'prop:pouf', 'prop:basket'}, set(), {'room'}),
-    'light': ({'back', 'mid', 'shade', 'prop:armchair', 'prop:table', 'prop:pouf', 'prop:basket'}, set(), {'room'}),
+    'beauty': ({'back', 'mid', 'logs', 'shade', 'candles', 'hourHand', 'minuteHand',
+                'prop:armchair', 'prop:table', 'prop:pouf', 'prop:basket'}, set(), {'room'}),
+    'light': ({'back', 'mid', 'shade', 'candles', 'hourHand', 'minuteHand',
+               'prop:armchair', 'prop:table', 'prop:pouf', 'prop:basket'}, set(), {'room'}),
 }
 PROPS = ['armchair', 'table', 'pouf', 'basket']
+# the session's timekeepers: the candles burn down and the clock's hands turn in the game
+TIMEKEEPERS = ['candles', 'hourHand', 'minuteHand']
 for p in PROPS:
     PASSES[p] = ({f'prop:{p}'}, {'back', 'mid', 'shade'}, {'room'})
     PASSES[f'shadow_{p}'] = ({'back', 'mid'}, {f'prop:{p}', 'shade'}, {'room'})
+for k in TIMEKEEPERS:
+    PASSES[k] = ({k}, {'back', 'mid'}, {'room'})
+# the candles' own lights warm the room round them, but not the candle layer: the candles burn
+# down in the game, so a lit top would show as a band once it slides down the body. Their warm
+# tops come from the live glow drawn with the flames instead.
+for k, (_, _, lit) in PASSES.items():
+    if 'room' in lit and k != 'candles':
+        lit.add('candlelight')
 
 
 def configure(name):
@@ -2037,6 +2061,14 @@ def main():
             img = render(name, work, scale)
             man['lights'][key] = {'file': f'{key}.png', 'box': crop_save(key, img)}
             composite[name] = img
+    man.setdefault('timekeepers', {})
+    for k in TIMEKEEPERS:
+        if do(k):
+            img = dof(render(k, work, scale), depth_of(k, work, scale, zmat), s)
+            man['timekeepers'][k] = {'file': f'{k}.png', 'box': crop_save(k, img)}
+            if k.endswith('Hand'):
+                man['timekeepers'][k]['pivot'] = [round(v, 2) for v in room.clock_pivot]
+            composite[k] = img
     if do('light'):
         white = bpy.data.materials.new('White')
         white.use_nodes = True
@@ -2069,6 +2101,9 @@ def main():
         img = over(composite['mid'], img)
         if 'logs' in composite:
             img = over(composite['logs'], img)
+        for k in TIMEKEEPERS:
+            if k in composite:
+                img = over(composite[k], img)
         for p in sorted((p for p in PROPS if p in composite), key=lambda p: zs.get(p, 900)):
             img = over(composite[p], img)
         if 'shade' in composite:

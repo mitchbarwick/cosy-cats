@@ -648,17 +648,8 @@ function drawFireplace(g) {
   g.fillRect(x0 - 26, 877, x1 - x0 + 52, 2);
 
 
-  // mantel decor (clock + plant); candles are animated separately
+  // mantel decor (clock + plant); the candles and the clock's hands are drawn live
   drawClock(g, 1820, mantel);
-  for (const c of CANDLES) {
-    g.fillStyle = linear(g, c.x - 7, 0, c.x + 7, 0, [[0, '#fff6e3'], [1, '#d9c7a4']]);
-    rr(g, c.x - 7, mantel - c.h, 14, c.h, 3);
-    g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.4)';
-    g.beginPath(); g.ellipse(c.x, mantel - c.h, 7, 2.5, 0, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = '#3a2a20'; g.lineWidth = 1.5;
-    g.beginPath(); g.moveTo(c.x, mantel - c.h); g.lineTo(c.x, mantel - c.h - 5); g.stroke();
-  }
   // brass holder
   g.fillStyle = linear(g, 1520, 0, 1600, 0, [[0, '#f0cf87'], [1, '#9a7032']]);
   rr(g, 1530, mantel - 6, 62, 6, 3); g.fill();
@@ -668,6 +659,34 @@ function drawFireplace(g) {
 }
 
 const CANDLES = [{ x: 1546, h: 54 }, { x: 1572, h: 38 }];
+// how much of each candle burns away over a session
+const CANDLE_BURN = 0.6;
+
+// Full-height candles, for the drawn room (the rendered room has its own candle layer)
+function drawCandles(g) {
+  const { mantel } = FIRE;
+  for (const c of CANDLES) {
+    g.fillStyle = linear(g, c.x - 7, 0, c.x + 7, 0, [[0, '#fff6e3'], [1, '#d9c7a4']]);
+    rr(g, c.x - 7, mantel - c.h, 14, c.h - 5, 3);
+    g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.4)';
+    g.beginPath(); g.ellipse(c.x, mantel - c.h, 7, 2.5, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#3a2a20'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(c.x, mantel - c.h); g.lineTo(c.x, mantel - c.h - 5); g.stroke();
+  }
+}
+
+// The clock's hands pointing at 12, for the drawn room; the game turns them about CLOCK_PIVOT
+const CLOCK_PIVOT = [1820, FIRE.mantel - 46];
+function drawHand(g, len, width, pin) {
+  const [x, y] = CLOCK_PIVOT;
+  g.strokeStyle = '#3a2a20'; g.lineWidth = width; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(x, y + 3); g.lineTo(x, y - len); g.stroke();
+  if (pin) {
+    g.fillStyle = '#d9b46a';
+    g.beginPath(); g.arc(x, y, 2.2, 0, Math.PI * 2); g.fill();
+  }
+}
 
 function drawLog(g, x, y, len, th, rot) {
   g.save();
@@ -725,8 +744,6 @@ function drawClock(g, x, base) {
   g.fillStyle = '#f7ecd3';
   g.beginPath(); g.arc(x, base - 46, 21, 0, Math.PI * 2); g.fill();
   g.strokeStyle = '#d9b46a'; g.lineWidth = 3; g.stroke();
-  g.strokeStyle = '#3a2a20'; g.lineWidth = 2; g.lineCap = 'round';
-  g.beginPath(); g.moveTo(x, base - 46); g.lineTo(x + 7, base - 52); g.moveTo(x, base - 46); g.lineTo(x - 2, base - 62); g.stroke();
 }
 
 function drawHangingPlant(g, x) {
@@ -1143,9 +1160,9 @@ async function loadRoom() {
     });
     const group = async (name) => Object.fromEntries(await Promise.all(
       Object.entries(man[name] || {}).map(async ([id, v]) => [id, { ...v, img: await image(v.file) }])));
-    const [plates, props, lights, lightmap] = await Promise.all([
-      group('plates'), group('props'), group('lights'), man.lightmap ? image(man.lightmap) : null]);
-    return { plates, props, lights, lightmap };
+    const [plates, props, lights, timekeepers, lightmap] = await Promise.all([
+      group('plates'), group('props'), group('lights'), group('timekeepers'), man.lightmap ? image(man.lightmap) : null]);
+    return { plates, props, lights, timekeepers, lightmap };
   } catch (e) {
     console.warn('Rendered room unavailable, drawing the canvas room instead', e);
     return null;
@@ -1308,6 +1325,19 @@ export class Scene {
     const layer = (id) => (R?.lights[id] ? { box: R.lights[id].box, canvas: image(R.lights[id]) } : null);
     this.lampShade = layer('lampShade');
     this.fireLogs = layer('fireLogs');
+    // the session's timekeepers, which the mid plate leaves out: the candles burn down and the
+    // clock's hands turn (drawn ones are baked under the light map like the rest of the room)
+    const keeper = (id, box, pivot, draw) => {
+      const r = R?.timekeepers?.[id];
+      if (r) return { box: r.box, pivot: r.pivot, canvas: image(r) };
+      return { box, pivot, canvas: bake(mk(box[2], box[3], box[0], box[1], draw), ...box) };
+    };
+    const [px, py] = CLOCK_PIVOT;
+    this.time = {
+      candles: keeper('candles', [1530, FIRE.mantel - 70, 62, 66], null, drawCandles),
+      hourHand: keeper('hourHand', [px - 6, py - 16, 12, 24], CLOCK_PIVOT, (g) => drawHand(g, 11, 2.6)),
+      minuteHand: keeper('minuteHand', [px - 6, py - 22, 12, 30], CLOCK_PIVOT, (g) => drawHand(g, 17, 2, true)),
+    };
     this.ready = true;
   }
 
@@ -1412,7 +1442,47 @@ export class Scene {
       }
     });
     this.at(ctx, LAYER.back, () => ctx.drawImage(this.back, ...this.backBox));
-    this.at(ctx, LAYER.mid, () => ctx.drawImage(this.mid, ...this.midBox));
+    this.at(ctx, LAYER.mid, () => {
+      ctx.drawImage(this.mid, ...this.midBox);
+      this.drawTimekeepers(ctx);
+    });
+  }
+
+  // How far a candle has burnt down (px) at this point in the session.
+  candleBurn(c) {
+    return c.h * CANDLE_BURN * this.progress;
+  }
+
+  // The room keeps time on the mantel: the candles burn down, and the clock counts the session
+  // down to eight o'clock. It reads five past seven at the start, and the minute hand comes
+  // round to the top as quiet time ends.
+  drawTimekeepers(ctx) {
+    const { candles, hourHand, minuteHand } = this.time;
+    // each candle: the cap (wick and rounded lip) rides down by the burn, over what's left of
+    // the body below it. The two only overlap inside the wax, so the soft edges don't double up.
+    const [bx, by, bw, bh] = candles.box;
+    const k = candles.canvas.width / bw;
+    const part = (x0, x1, y0, y1, dy) => ctx.drawImage(candles.canvas, (x0 - bx) * k, (y0 - by) * k, (x1 - x0) * k, (y1 - y0) * k,
+      x0, y0 + dy, x1 - x0, y1 - y0);
+    for (const c of CANDLES) {
+      const d = this.candleBurn(c);
+      const x0 = Math.max(bx, c.x - 13), x1 = Math.min(bx + bw, c.x + 13);
+      const cap = FIRE.mantel - c.h + 3;
+      part(x0, x1, cap + d, by + bh, 0);
+      part(x0, x1, by, cap, d);
+      part(c.x - 5, c.x + 5, cap, cap + 1, d);
+    }
+    const minute = (30 + 330 * this.progress) * Math.PI / 180;
+    const hour = 7 * Math.PI / 6 + minute / 12;
+    for (const [hand, a] of [[hourHand, hour], [minuteHand, minute]]) {
+      const [x, y] = hand.pivot;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(a);
+      ctx.translate(-x, -y);
+      ctx.drawImage(hand.canvas, ...hand.box);
+      ctx.restore();
+    }
   }
 
   drawForeground(ctx) {
@@ -1534,7 +1604,7 @@ export class Scene {
       ctx.fillRect(1100, 300, 820, 780);
       // candles on the mantel
       CANDLES.forEach((c, i) => {
-        const fy = FIRE.mantel - c.h - 6;
+        const fy = FIRE.mantel - c.h - 6 + this.candleBurn(c);
         const s = 0.85 + 0.25 * noise1(t * 6 + i * 4);
         const sway = (noise1(t * 3 + i * 9) - 0.5) * 3;
         ctx.fillStyle = radial(ctx, c.x, fy, 60, [[0, `rgba(255,190,100,${0.25 * s})`], [1, 'rgba(255,160,80,0)']]);

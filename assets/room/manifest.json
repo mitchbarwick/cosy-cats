@@ -112,5 +112,42 @@
       ]
     }
   },
-  "lightmap": "lightmap.png"
+  "lightmap": "lightmap.png",
+  "timekeepers": {
+    "candles": {
+      "file": "candles.png",
+      "box": [
+        1531,
+        404,
+        56,
+        70
+      ]
+    },
+    "hourHand": {
+      "file": "hourHand.png",
+      "box": [
+        1810,
+        406,
+        20,
+        29
+      ],
+      "pivot": [
+        1820.0,
+        424.24
+      ]
+    },
+    "minuteHand": {
+      "file": "minuteHand.png",
+      "box": [
+        1810,
+        400,
+        20,
+        35
+      ],
+      "pivot": [
+        1820.0,
+        424.24
+      ]
+    }
+  }
 }
