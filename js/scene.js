@@ -1,8 +1,10 @@
-// The cosy library: a pre-rendered room plus animated layers (sky, fire, candles, lights).
+// The scenes. The cosy library: a pre-rendered room plus animated layers (sky, fire, candles,
+// lights). The sunny park (park.js) is the other one; Scene shows whichever the teacher picked.
 import {
   W, H, FLOOR_Y, lerp, clamp, makeRng, noise1, rr, shade, rgba, makeCanvas,
   grainCanvas, fibreCanvas, texturePath, radial, linear, softShadow,
 } from './util.js';
+import { Park, PARK_SPOTS, PARK_BALL } from './park.js';
 
 // ---------------------------------------------------------------------------
 // Layout
@@ -22,7 +24,7 @@ export const VIEW = { x: 280, y: 160, w: 1600, h: 900 };
 
 // Places a cat can settle. `route` is walked from the floor: first entry is a floor point,
 // later entries are jumps. Elevated spots carry their own draw depth (z) and scale.
-export const SPOTS = [
+const LIBRARY_SPOTS = [
   { id: 'shelfHigh', x: 446, y: 470, z: 470, scale: 0.7, poses: ['loaf', 'sleep', 'sit', 'groom'], facing: -1,
     route: [{ x: 790, y: 905 }, { x: 712, y: 707, z: 872, jump: true }, { x: 446, y: 470, z: 470, jump: true }] },
   { id: 'shelfLow', x: 430, y: 650, z: 650, scale: 0.7, poses: ['loaf', 'sleep', 'sit'], facing: 1,
@@ -43,6 +45,10 @@ export const SPOTS = [
   // Toby's place: flopped on the back of the rug between the cats (dogs only)
   { id: 'dogRug', x: 992, y: 900, poses: ['sleep', 'loaf', 'sit'], facing: -1, dog: true, route: [{ x: 992, y: 900 }] },
 ];
+// The spots of the scene on show. Scene.setScene() swaps its contents, so everything that
+// imports SPOTS always sees the current scene's places.
+const SCENE_SPOTS = { library: LIBRARY_SPOTS, park: PARK_SPOTS };
+export const SPOTS = [...LIBRARY_SPOTS];
 
 // How strongly a layer at depth z follows the slow camera drift (parallax).
 export function depthFactor(z) {
@@ -1050,7 +1056,7 @@ const PROP_DEFS = [
 
 // The layout as data, so tools/blender/felt_room.py builds the 3D room to the same plan.
 export const LAYOUT = {
-  W, H, FLOOR_Y, FLOOR_LANE, SHELF, WIN, FIRE, TABLE, CHAIR, POUF, CANDLES, FAIRY, SPOTS,
+  W, H, FLOOR_Y, FLOOR_LANE, SHELF, WIN, FIRE, TABLE, CHAIR, POUF, CANDLES, FAIRY, SPOTS: LIBRARY_SPOTS,
   VIEW: [VIEW.x, VIEW.y, VIEW.w, VIEW.h],
   PROPS: PROP_DEFS.map(({ id, box, z }) => ({ id, box, z })),
 };
@@ -1176,18 +1182,22 @@ export class Scene {
   constructor() {
     // undefined while we find out whether a rendered room exists; then the room or null
     this.room = undefined;
+    this.kind = 'library';
+    this.park = new Park(this);
     this.ready = false;
     this.props = [];
     this.wantScale = 1;
     this.roomReady = loadRoom().then((room) => {
       this.room = room;
-      this.lastScale = 0;
-      this.build(this.wantScale);
+      if (this.kind === 'library') {
+        this.lastScale = 0;
+        this.build(this.wantScale);
+      }
       return room;
     });
     // never leave the room empty: if the rendered plates are slow, draw the canvas room meanwhile
     setTimeout(() => {
-      if (this.room !== undefined) return;
+      if (this.room !== undefined || this.kind !== 'library') return;
       this.room = null;
       this.lastScale = 0;
       this.build(this.wantScale);
@@ -1220,6 +1230,27 @@ export class Scene {
     this.lastScale = 0;
   }
 
+  // Show another scene ('library' or 'park'). Only when nobody is in the room: the spots change.
+  setScene(kind) {
+    if (!SCENE_SPOTS[kind] || kind === this.kind) return;
+    this.kind = kind;
+    SPOTS.length = 0;
+    SPOTS.push(...SCENE_SPOTS[kind]);
+    for (const s of SPOTS) s.taken = null;
+    Object.assign(this.yarn, kind === 'park' ? PARK_BALL : { x: 1060, y: 948 }, { vx: 0 });
+    this.ready = false;
+    this.props = [];
+    this.lastScale = 0;
+    this.build(this.wantScale);
+  }
+
+  // The rendered park's plates have arrived: swap them in for the drawn ones.
+  parkLoaded() {
+    if (this.kind !== 'park') return;
+    this.lastScale = 0;
+    this.build(this.wantScale);
+  }
+
   newFlake(anyY) {
     return {
       x: WIN.x0 - 40 + Math.random() * (WIN.x1 - WIN.x0 + 80),
@@ -1236,6 +1267,22 @@ export class Scene {
   build(scale) {
     scale = Math.min(scale, 2.2);
     this.wantScale = scale;
+    if (this.kind === 'park') {
+      if (Math.abs(scale - this.lastScale) < 0.01) return;
+      this.lastScale = scale;
+      const park = this.park;
+      park.build(scale);
+      this.props = park.props;
+      this.fore = park.fore;
+      this.foreBox = park.foreBox;
+      const pm = makeCanvas(96, 54);
+      const pg = pm.getContext('2d', { willReadFrequently: true });
+      pg.scale(96 / W, 54 / H);
+      park.drawLightmap(pg);
+      this.lightData = pg.getImageData(0, 0, 96, 54).data;
+      this.ready = true;
+      return;
+    }
     if (this.room === undefined) return;
     if (Math.abs(scale - this.lastScale) < 0.01) return;
     this.lastScale = scale;
@@ -1377,6 +1424,7 @@ export class Scene {
   }
 
   update(dt, t) {
+    if (this.kind === 'park') this.park.update(dt, t);
     for (const f of this.snow) {
       f.y += f.v * dt;
       f.x += Math.sin(t * 0.8 + f.ph) * 8 * dt;
@@ -1415,6 +1463,7 @@ export class Scene {
 
   drawBackground(ctx, t) {
     if (!this.ready) return;
+    if (this.kind === 'park') { this.park.drawBackground(ctx, t); return; }
     // sky: clipped by the window (back layer) but drifting even less → depth through the glass.
     // The rendered back plate is see-through only in the window, so its clip can be generous.
     this.at(ctx, LAYER.back, () => {
@@ -1519,7 +1568,7 @@ export class Scene {
   // Fire + candles: drawn before the lightmap so cats in front still occlude them,
   // then their glow is added afterwards.
   drawFire(ctx, t) {
-    if (!this.ready) return;
+    if (!this.ready || this.kind !== 'library') return;
     const { x0, x1, bottom } = FIRE.open;
     const cx = (x0 + x1) / 2;
     ctx.save();
@@ -1593,6 +1642,7 @@ export class Scene {
   // Live light touches, each drawn on the parallax layer of the thing that emits it.
   drawGlow(ctx, t) {
     if (!this.ready) return;
+    if (this.kind === 'park') { this.park.drawGlow(ctx, t); return; }
     const fl = 0.85 + 0.15 * noise1(t * 4) + 0.08 * noise1(t * 11 + 3);
     const lampFl = (0.97 + 0.03 * noise1(t * 2.3 + 8)) * (1 + 0.25 * this.finale + 0.15 * this.reward);
     const fire = this.flameLevel();
@@ -1706,6 +1756,7 @@ export class Scene {
   }
 
   drawPost(ctx, t) {
+    if (this.ready && this.kind === 'park') this.park.drawPost(ctx, t);
     // light vignette (projectors already lose the edges) + felt grain
     ctx.save();
     const v = VIEW;

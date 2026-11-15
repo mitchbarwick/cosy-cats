@@ -7,7 +7,7 @@ const path = require('path');
 const root = __dirname;
 const port = process.env.PORT || 5173;
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml',
-  '.json': 'application/json', '.webm': 'video/webm', '.mov': 'video/quicktime', '.mp4': 'video/mp4' };
+  '.json': 'application/json', '.webm': 'video/webm', '.mov': 'video/quicktime', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg' };
 
 http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);

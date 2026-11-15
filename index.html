@@ -16,7 +16,7 @@
     <div id="intro" class="overlay">
       <form id="picker" class="card">
         <h1>Cosy Cats</h1>
-        <p>Set a quiet time. While the room stays calm, cats come to visit.<br />Fill the library and someone special comes too.</p>
+        <p>Set a quiet time. While the room stays calm, cats come to visit.<br /><span id="introFill">Fill the library and someone special comes too.</span></p>
         <label class="field">What are we doing?
           <input id="activity" type="text" maxlength="40" placeholder="Quiet reading" autocomplete="off" />
         </label>
@@ -41,8 +41,6 @@
       <h2 id="endTitle">Quiet reading done!</h2>
       <p id="endText">10 cats and Toby came to visit</p>
       <div class="buttons">
-        <button id="endPlus1">+1 min</button>
-        <button id="endPlus5">+5 min</button>
         <button id="endNew" class="primary">New session</button>
         <button id="endClose" class="ghost">Close</button>
       </div>
@@ -55,6 +53,7 @@
     </div>
     <div id="pausedBanner" class="hidden">Paused · eyes on the teacher</div>
     <div id="minuteNote" class="hidden">One minute left</div>
+    <div id="timeUpNote" class="hidden">Time's up · stay quiet until your teacher says</div>
     <div id="activityTag" class="hidden"></div>
     <div id="fader"></div>
 
@@ -74,6 +73,7 @@
         <div id="nextCatLabel">15 min left</div>
         <button id="plus1" class="mini" title="Add a minute">+1</button>
         <button id="plus5" class="mini" title="Add five minutes">+5</button>
+        <button id="endBtn" class="primary" title="End the session and go back to the start">End session</button>
       </div>
     </div>
 
@@ -81,6 +81,12 @@
     <button id="settingsToggle" title="Settings">⚙</button>
     <div id="settings" class="hidden">
       <h2>Teacher controls</h2>
+      <label>Scene
+        <select id="sceneSelect">
+          <option value="library" selected>Cosy library</option>
+          <option value="park">Sunny park</option>
+        </select></label>
+      <p id="sceneNote" class="hidden">The scene changes at the next session.</p>
       <label>Noise limit <span id="limitVal"></span>
         <input type="range" id="limit" min="0.15" max="0.9" step="0.01" value="0.55" /></label>
       <label>Mic sensitivity <span id="sensVal"></span>
@@ -93,6 +99,7 @@
         </select></label>
       <label class="row"><input type="checkbox" id="music" checked /> Lo-fi music</label>
       <label class="row"><input type="checkbox" id="catSounds" checked /> Animal sounds</label>
+      <label class="row"><input type="checkbox" id="warnSound" checked /> Warning sound (a cat is about to leave)</label>
       <label class="row"><input type="checkbox" id="chime" checked /> End chime</label>
       <label class="row"><input type="checkbox" id="saver" checked /> Battery saver (30 fps)</label>
       <div class="buttons">

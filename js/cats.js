@@ -99,6 +99,7 @@ class Cat {
     this.age = 0;
     this.busy = null;
     this.attending = false; this.front = 0; // paused: sitting up, facing the room
+    this.bubble = null; this.bubbleA = 0;   // the sign over its head: 'warn' (may leave) or 'leave'
   }
 
   // --- action queue ----------------------------------------------------------
@@ -449,6 +450,12 @@ class Cat {
       this.flick();
     }
     this.front = lerp(this.front, this.attending ? 1 : 0, 1 - Math.exp(-dt * 4));
+
+    // The sign over its head. It only fades in and out: it's information, not a show.
+    const sign = this.attending ? null : this.state === 'leaving' ? 'leave' : w.warned === this ? 'warn' : null;
+    if (sign) this.bubble = sign;
+    this.bubbleA = clamp(this.bubbleA + (sign ? dt * 4 : -dt * 2.5), 0, 1);
+    if (!sign && this.bubbleA <= 0) this.bubble = null;
 
     if (!this.attending && !this.seg && this.queue.length) this.startSeg(this.queue.shift());
     let speed = 0;
@@ -816,6 +823,98 @@ class Cat {
     ctx.fillText(text, x, y + 1);
     ctx.restore();
   }
+
+  // The sign over a cat's head, big enough to read from the back of the room.
+  //   warn:  a thought bubble with a loudness symbol. Its waves go from one to three, and from
+  //          amber to red, as the cat gets closer to leaving.
+  //   leave: a plain bubble with a paw print and an arrow pointing the way it is going.
+  // Both are still pictures that fade in and out. Nothing here should be fun to set off.
+  drawBubble(ctx) {
+    if (!this.bubble || this.bubbleA <= 0) return;
+    const p = unflat(this.cur);
+    const s = this.scale * this.def.size * CAT_SCALE;
+    const hx = this.x + p.head[0] * s * this.dirVis;
+    const hy = this.y + (p.head[1] - p.head[2] * 1.3) * s;
+    // keep the bubble inside the view, whichever way the cat faces
+    const side = hx > VIEW.x + VIEW.w - 150 ? -1 : hx < VIEW.x + 150 ? 1 : (this.dirVis < 0 ? -1 : 1);
+    const K = 1.25; // drawn a quarter larger than laid out
+    const cx = hx + side * 46 * K, cy = Math.max(VIEW.y + 62 * K, hy - 78 * K);
+    const ink = '#5a4034';
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(K, K); ctx.translate(-cx, -cy);
+    ctx.globalAlpha = this.bubbleA;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // Each bubble is one outline, filled once: the body, its tail or puffs, and the shadow all
+    // belong to a single shape, with a thin rim to hold it together against a busy scene.
+    const body = () => {
+      ctx.shadowColor = 'rgba(40,24,16,0.32)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 3;
+      ctx.fillStyle = '#fffaf0';
+      ctx.fill();
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+      ctx.strokeStyle = 'rgba(90,64,52,0.3)'; ctx.lineWidth = 2;
+      ctx.stroke();
+    };
+    if (this.bubble === 'warn') {
+      // thought bubble: one scalloped cloud outline, with two small puffs leading down to the head
+      const lobes = 9, rx = 52, ry = 36;
+      ctx.beginPath();
+      for (let i = 0; i <= lobes; i++) {
+        const a = (i / lobes) * Math.PI * 2 - Math.PI / 2;
+        const px = cx + Math.cos(a) * rx, py = cy + Math.sin(a) * ry;
+        if (!i) { ctx.moveTo(px, py); continue; }
+        // each scallop bulges out between two points on the oval
+        const m = ((i - 0.5) / lobes) * Math.PI * 2 - Math.PI / 2;
+        ctx.quadraticCurveTo(cx + Math.cos(m) * rx * 1.3, cy + Math.sin(m) * ry * 1.34, px, py);
+      }
+      ctx.closePath();
+      ctx.moveTo(cx - side * 30 + 8, cy + 56); ctx.arc(cx - side * 30, cy + 56, 8, 0, Math.PI * 2);
+      ctx.moveTo(cx - side * 42 + 4.5, cy + 72); ctx.arc(cx - side * 42, cy + 72, 4.5, 0, Math.PI * 2);
+      body();
+      // loudness: a speaker, and more (and redder) waves the closer the cat is to going
+      const lvl = this.world.warned === this ? this.world.warn : this.warnShown || 0;
+      this.warnShown = lvl;
+      const waves = lvl > 0.66 ? 3 : lvl > 0.33 ? 2 : 1;
+      const col = waves === 3 ? '#c2492f' : waves === 2 ? '#d5702f' : '#d99a3b';
+      ctx.translate(cx - 13, cy);
+      ctx.fillStyle = col; ctx.strokeStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(-18, -7); ctx.lineTo(-9, -7); ctx.lineTo(2, -17); ctx.lineTo(2, 17); ctx.lineTo(-9, 7); ctx.lineTo(-18, 7);
+      ctx.closePath(); ctx.fill();
+      ctx.lineWidth = 4.5;
+      for (let i = 0; i < 3; i++) {
+        ctx.globalAlpha = this.bubbleA * (i < waves ? 1 : 0.16);
+        ctx.beginPath(); ctx.arc(2, 0, 11 + i * 9, -0.62, 0.62); ctx.stroke();
+      }
+    } else {
+      // leaving: a rounded speech bubble whose tail is part of the same outline
+      const out = this.x < VIEW_MID ? -1 : 1;
+      const w = 52, h = 31, r = 24;
+      const l = cx - w, rgt = cx + w, top = cy - h, bot = cy + h;
+      // the tail leaves the bottom edge on the cat's side and curves to a soft point
+      const ta = cx - side * 8, tb = cx - side * 30, tipX = cx - side * 40, tipY = bot + 24;
+      const [t1, t2] = side > 0 ? [ta, tb] : [tb, ta]; // along the bottom edge, right to left
+      ctx.beginPath();
+      ctx.moveTo(l + r, top);
+      ctx.lineTo(rgt - r, top); ctx.quadraticCurveTo(rgt, top, rgt, top + r);
+      ctx.lineTo(rgt, bot - r); ctx.quadraticCurveTo(rgt, bot, rgt - r, bot);
+      ctx.lineTo(t1, bot);
+      if (side > 0) { ctx.quadraticCurveTo(lerp(t1, tipX, 0.4), bot + 16, tipX, tipY); ctx.quadraticCurveTo(lerp(t2, tipX, 0.2), bot + 8, t2, bot); }
+      else { ctx.quadraticCurveTo(lerp(t1, tipX, 0.2), bot + 8, tipX, tipY); ctx.quadraticCurveTo(lerp(t2, tipX, 0.4), bot + 16, t2, bot); }
+      ctx.lineTo(l + r, bot); ctx.quadraticCurveTo(l, bot, l, bot - r);
+      ctx.lineTo(l, top + r); ctx.quadraticCurveTo(l, top, l + r, top);
+      ctx.closePath();
+      body();
+      ctx.translate(cx, cy);
+      ctx.scale(out, 1);
+      ctx.fillStyle = ink; ctx.strokeStyle = ink;
+      // paw print (behind), arrow (ahead)
+      ctx.beginPath(); ctx.ellipse(-24, 5, 9, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+      for (const [dx, dy] of [[-33, -6], [-24, -10], [-15, -6]]) { ctx.beginPath(); ctx.arc(dx, dy, 3.6, 0, Math.PI * 2); ctx.fill(); }
+      ctx.lineWidth = 5.5;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(30, 0); ctx.moveTo(19, -11); ctx.lineTo(31, 0); ctx.lineTo(19, 11); ctx.stroke();
+    }
+    ctx.restore();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -829,6 +928,8 @@ export class CatWorld {
     this.yarnUser = null;
     this.alert = false;
     this.paused = false;
+    this.warn = 0;      // 0..1: how close the next cat is to leaving (0 = the room is calm enough)
+    this.warned = null; // the cat showing the warning bubble: the one that will leave next
     this.departed = []; // recent leavers, newest last, for the undo button
     this.pixelScale = 1;
     this.onChange = () => {};
@@ -907,13 +1008,25 @@ export class CatWorld {
     return d && this.time - d.at < RECALL_WINDOW ? d.def : null;
   }
 
-  removeCat() {
+  // Who leaves next: the one who has been here longest gets up first; newcomers keep settling.
+  nextToLeave() {
     const candidates = this.cats.filter((c) => c.state !== 'leaving');
     if (!candidates.length) return null;
-    // the one who has been here longest gets up first; newcomers keep settling
     const settled = candidates.filter((c) => c.state === 'resting' || c.state === 'outing');
     const pool = settled.length ? settled : candidates;
-    const cat = pool.reduce((a, b) => (a.age > b.age ? a : b));
+    return pool.reduce((a, b) => (a.age > b.age ? a : b));
+  }
+
+  // The noise state machine says how close a cat is to leaving (0 = not at all). The cat that
+  // would go shows the warning bubble, with a soft two-note cue as it appears.
+  setWarning(level) { this.warn = level; }
+
+  removeCat() {
+    // the cat that was showing the warning is the one that goes
+    const warned = this.warned && this.cats.includes(this.warned) && this.warned.state !== 'leaving' ? this.warned : null;
+    const cat = warned || this.nextToLeave();
+    if (!cat) return null;
+    this.warned = null;
     cat.leave();
     this.onChange();
     return cat;
@@ -946,6 +1059,8 @@ export class CatWorld {
     this.yarnUser = null;
     this.alert = false;
     this.paused = false;
+    this.warn = 0;
+    this.warned = null;
     this.onChange();
   }
 
@@ -962,6 +1077,12 @@ export class CatWorld {
 
   update(dt) {
     this.time += dt;
+    if (this.warn > 0 && !this.paused) {
+      if (!this.warned || this.warned.state === 'leaving' || !this.cats.includes(this.warned)) {
+        this.warned = this.nextToLeave();
+        if (this.warned) this.sfx?.warn();
+      }
+    } else this.warned = null;
     for (const c of this.cats) c.update(dt);
     const before = this.cats.length;
     for (const c of this.cats) if (c.state === 'gone') c.clips?.dispose();
@@ -1002,5 +1123,6 @@ export class CatWorld {
       ctx.restore();
     }
     for (const c of this.cats) c.drawLabel(ctx);
+    for (const c of this.cats) c.drawBubble(ctx);
   }
 }

@@ -19,7 +19,7 @@ world.onRecall = (def) => session.recalled(def);
 const SETTINGS_KEY = 'cosy-cats-settings-v3';
 const settings = {
   limit: 0.55, sens: 2, strict: 'normal', music: true, catSounds: true, chime: true, saver: true,
-  minutes: 15, activity: '', useMic: true,
+  minutes: 15, activity: '', useMic: true, scene: 'library', warnSound: true,
 };
 try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch {}
 const save = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch {} };
@@ -38,7 +38,7 @@ bindRange('limit', 'limit', (v) => `${Math.round(v * 100)}%`);
 bindRange('sens', 'sens', (v) => `×${v.toFixed(1)}`);
 $('strict').value = settings.strict;
 $('strict').addEventListener('change', () => { settings.strict = $('strict').value; save(); });
-for (const key of ['music', 'catSounds', 'chime', 'saver']) {
+for (const key of ['music', 'catSounds', 'warnSound', 'chime', 'saver']) {
   const el = $(key);
   el.checked = settings[key];
   el.addEventListener('change', () => { settings[key] = el.checked; apply(); save(); });
@@ -47,10 +47,33 @@ let teacherPaused = false;
 function apply() {
   audio.sensitivity = settings.sens;
   audio.catSounds = settings.catSounds;
+  audio.warnSounds = settings.warnSound;
   audio.setMusic(settings.music && !teacherPaused);
   $('noiseLimit').style.left = `${settings.limit * 100}%`;
 }
 apply();
+
+// The scene: the library or the park. It can change whenever the room is empty (before a session);
+// a change made mid-session waits for the next one, so nobody's spot vanishes from under them.
+const SCENE_COPY = {
+  library: { volume: 'Library volume', intro: 'Fill the library and someone special comes too.' },
+  park: { volume: 'Park volume', intro: 'Fill the park and someone special comes too.' },
+};
+function applyScene() {
+  if (!SCENE_COPY[settings.scene]) settings.scene = 'library';
+  const waiting = session.state !== 'setup' && scene.kind !== settings.scene;
+  $('sceneNote').classList.toggle('hidden', !waiting);
+  if (!waiting && scene.kind !== settings.scene) {
+    world.reset();
+    scene.setScene(settings.scene);
+  }
+  const copy = SCENE_COPY[scene.kind];
+  $('noiseLabel').textContent = copy.volume;
+  $('introFill').textContent = copy.intro;
+}
+$('sceneSelect').value = settings.scene;
+$('sceneSelect').addEventListener('change', () => { settings.scene = $('sceneSelect').value; save(); applyScene(); });
+applyScene();
 
 $('settingsToggle').addEventListener('click', () => $('settings').classList.toggle('hidden'));
 $('fullscreenBtn').addEventListener('click', () => {
@@ -112,6 +135,7 @@ function startSession() {
   session.start(settings.minutes, activityName());
   Object.assign(noise, { state: 'calm', loud: 0, cooldown: 0, settle: 0, leftMsg: 0 });
   world.alert = false;
+  world.setWarning(0);
   $('activityTag').textContent = activityName();
   $('activityTag').classList.remove('hidden');
   $('endCard').classList.add('hidden');
@@ -123,7 +147,7 @@ function startSession() {
 function setPaused(on) {
   if (on && !session.active) return;
   teacherPaused = on;
-  if (on) { world.alert = false; noise.state = 'calm'; noise.loud = 0; }
+  if (on) { world.alert = false; world.setWarning(0); noise.state = 'calm'; noise.loud = 0; }
   else noise.settle = Math.max(noise.settle, 4); // a moment to settle back before anyone new arrives
   apply();
   $('pausedBanner').classList.toggle('hidden', !on);
@@ -144,38 +168,53 @@ $('undoBtn').addEventListener('click', () => {
   if (!world.recall()) return;
   Object.assign(noise, { state: 'calm', loud: 0, cooldown: 8, leftMsg: 0 });
   world.alert = false;
+  world.setWarning(0);
 });
 
 function extend(minutes) {
-  const wasDone = session.state === 'done';
+  if (!session.active) return;
   session.extend(minutes * 60);
-  if (wasDone) {
-    celebrateUntil = 0;
-    $('endCard').classList.add('hidden');
-    $('activityTag').classList.remove('hidden');
-  }
+  $('timeUpNote').classList.add('hidden');
   setHudMode();
 }
-for (const [id, m] of [['plus1', 1], ['plus5', 5], ['endPlus1', 1], ['endPlus5', 5]]) $(id).addEventListener('click', () => extend(m));
-$('endNow').addEventListener('click', () => { if (session.active) { setPaused(false); session.elapsed = session.length; } });
+for (const [id, m] of [['plus1', 1], ['plus5', 5]]) $(id).addEventListener('click', () => extend(m));
+$('endNow').addEventListener('click', () => endSession());
+$('endBtn').addEventListener('click', () => endSession());
 $('endClose').addEventListener('click', () => $('endCard').classList.add('hidden'));
 $('endNew').addEventListener('click', () => newSession());
 
-// Time's up: everyone sits up and faces the room for a moment, a soft chime, hearts, then the
-// animals stay to doze in the room the class filled. Nobody new comes and nobody leaves.
+// Time's up, but the room doesn't change its rules: a soft chime for the teacher, a note that
+// asks the class to stay quiet, and the End session button appears. Cats still wander off if
+// the room gets noisy, and still come back when it's calm, until the teacher ends the session.
+let timeUpAt = -Infinity;
+function timeUp() {
+  timeUpAt = world.time;
+  if (settings.chime) audio.endChime();
+  $('minuteNote').classList.add('hidden');
+  $('timeUpNote').classList.remove('hidden');
+  setHudMode();
+}
+
+// The teacher ends the session: everyone who stayed sits up and faces the room for a moment,
+// hearts, and a card says who is there. Only now do the rules stop.
 let celebrateUntil = 0;
-function finish() {
+function endSession() {
+  if (!session.active) return;
   setPaused(false);
+  session.finish();
   world.departed = [];
   world.alert = false;
+  world.setWarning(0);
+  Object.assign(noise, { state: 'calm', loud: 0, leftMsg: 0 });
   celebrateUntil = world.time + 3.5;
-  if (settings.chime) audio.endChime();
   world.cheer();
   const cats = world.catCount;
   const toby = !!world.toby;
   $('endTitle').textContent = `${activityName()} done!`;
   $('endText').textContent = cats === 0 ? 'The cats will come and visit next time'
-    : `${cats} ${cats === 1 ? 'cat' : 'cats'}${toby ? ' and Toby' : ''} came to visit`;
+    : `${cats} ${cats === 1 ? 'cat' : 'cats'}${toby ? ' and Toby' : ''} stayed to the end`;
+  $('timeUpNote').classList.add('hidden');
+  $('minuteNote').classList.add('hidden');
   setTimeout(() => { if (session.state === 'done') $('endCard').classList.remove('hidden'); }, 1200);
   setHudMode();
 }
@@ -192,6 +231,8 @@ function newSession() {
     celebrateUntil = 0;
     $('activityTag').classList.add('hidden');
     $('minuteNote').classList.add('hidden');
+    $('timeUpNote').classList.add('hidden');
+    applyScene(); // a scene chosen mid-session takes over now the room is empty
     $('intro').classList.remove('gone');
     setHudMode();
     $('fader').classList.remove('on');
@@ -201,6 +242,7 @@ function newSession() {
 function minuteNote() {
   const el = $('minuteNote');
   el.classList.remove('hidden');
+  $('timeUpNote').classList.add('hidden');
   setTimeout(() => el.classList.add('hidden'), 5000);
 }
 
@@ -209,13 +251,15 @@ function minuteNote() {
 // restless ──(loud for the strictness grace in total)──▶ one cat gently wanders off, then a cooldown
 // restless ──(back under the lower threshold until the loud timer drains)──▶ calm
 // The band between the two thresholds holds the timers, so a cough or a dropped pencil does nothing.
+// While the room is restless, the cat that would leave next shows a thought bubble that fills as
+// the grace runs out (world.setWarning), so the class can see how close the consequence is.
 const LOOK_UP = 1.5;
 const hud = $('hud');
 const noise = { state: 'calm', loud: 0, cooldown: 0, settle: 0, leftMsg: 0 };
 
 function updateNoise(dt) {
   const level = audio.readLevel(dt);
-  // noise only matters while a session is running and not paused
+  // noise matters for as long as a session is going (overtime included) and not paused
   if (!session.active || world.paused) return level;
   const hi = settings.limit;
   const lo = settings.limit * 0.8;
@@ -232,10 +276,11 @@ function updateNoise(dt) {
   }
   if (noise.state === 'restless') {
     if (noise.loud >= grace && noise.cooldown <= 0 && world.count > 0) {
-      world.removeCat();
+      const left = world.removeCat();
       noise.cooldown = 8;
       noise.loud = LOOK_UP + 0.1;
       noise.leftMsg = 5;
+      noise.leftName = left?.def.name;
     }
     if (noise.loud <= 0) {
       noise.state = 'calm';
@@ -243,6 +288,8 @@ function updateNoise(dt) {
       noise.settle = 8; // stay calm a little while before anyone new walks in
     }
   }
+  // how close the next cat is to leaving: 0 = nobody is thinking of it, 1 = about to go
+  world.setWarning(noise.state === 'restless' ? clamp((noise.loud - LOOK_UP) / (grace - LOOK_UP), 0.01, 1) : 0);
   return level;
 }
 
@@ -255,17 +302,18 @@ function updateSession(dt) {
     if (ev.arrive) { world.addCat(); session.arrived(); }
     if (ev.toby && world.addToby()) session.tobyArrived();
     if (ev.minute) minuteNote();
-    if (ev.end) finish();
+    if (ev.end) timeUp();
   }
   // the room keeps time: deeper night, settling fire, brighter lights for the last minute
   const done = session.state === 'done';
   const k = 1 - Math.exp(-dt * 1.5);
   scene.progress = session.state === 'setup' ? lerp(scene.progress, 0, k) : session.progress;
-  scene.finale = lerp(scene.finale, session.state === 'final' ? 1 : 0, k);
+  scene.finale = lerp(scene.finale, session.state === 'final' || session.over ? 1 : 0, k);
   scene.reward = lerp(scene.reward, done ? 1 : 0, k);
-  // music fades over the last 30 s, then comes back softly for the finished room
-  const level = session.active ? clamp(session.remaining / 30, 0, 1)
-    : done ? (world.time < celebrateUntil ? 0 : 0.45) : 0.7;
+  // music fades over the last 30 s, then comes back softly once the chime has rung
+  const level = session.over ? (world.time < timeUpAt + 5 ? 0 : 0.45)
+    : session.active ? clamp(session.remaining / 30, 0, 1)
+    : done ? 0.45 : 0.7;
   audio.setMusicLevel(level);
 }
 
@@ -279,6 +327,7 @@ function setHudMode() {
   const done = session.state === 'done';
   hud.classList.toggle('paused', teacherPaused);
   hud.classList.toggle('idle', !session.active);
+  hud.classList.toggle('over', session.over);
   $('pauseBtn').classList.toggle('on', teacherPaused);
   $('pauseIcon').textContent = done ? '↺' : teacherPaused ? '▶' : '⏸';
   $('pauseLabel').textContent = done ? 'New session' : teacherPaused ? 'Resume' : 'Pause';
@@ -287,7 +336,8 @@ function setHudMode() {
 
 function timeLeft() {
   if (session.state === 'setup') return `${settings.minutes} min`;
-  if (session.state === 'done') return "Time's up";
+  if (session.state === 'done') return 'All done';
+  if (session.over) return "Time's up";
   const r = session.remaining;
   return r > 60 ? `${Math.ceil(r / 60)} min left` : 'Final minute';
 }
@@ -299,11 +349,11 @@ function updateHud(level) {
   hud.classList.toggle('loud', session.active && ratio > 1);
   hud.classList.toggle('restless', noise.state === 'restless');
   let msg;
-  if (session.state === 'done') msg = 'All done. Enjoy the room!';
+  if (session.state === 'done') msg = 'Session ended';
   else if (teacherPaused) msg = 'Paused';
   else if (!audio.micOn) msg = 'Mic off';
-  else if (noise.leftMsg > 0) msg = 'A cat wandered off for a nap';
-  else if (noise.state === 'restless') msg = 'The cats are listening…';
+  else if (noise.leftMsg > 0) msg = `Too noisy: ${noise.leftName || 'a cat'} left`;
+  else if (noise.state === 'restless') msg = world.warned ? `Too noisy for ${world.warned.def.name}…` : 'The cats are listening…';
   else if (ratio > 0.8) msg = 'Getting noisy…';
   else if (ratio > 0.45) msg = 'Nice and calm';
   else msg = 'Lovely and quiet';

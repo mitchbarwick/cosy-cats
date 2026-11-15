@@ -2123,4 +2123,5 @@ def main():
             save(os.path.join(work, 'view_spots.png'), crop(mark_spots(img, L, s)))
 
 
-main()
+if __name__ == '__main__':
+    main()

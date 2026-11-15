@@ -1,7 +1,8 @@
 // A quiet-time session: the teacher picks a length, and the ten cats are due across it on a
 // front-loaded curve (quick at first, further apart later). Toby, the full-house reward, is due
 // in the final minute. The clock is real time: noise never adds time, it only holds arrivals
-// back (a cat due while the room is loud waits until it's calm) and sends cats home.
+// back (a cat due while the room is loud waits until it's calm) and sends cats home. When the
+// time is up the same rules keep running until the teacher ends the session.
 import { clamp } from './util.js';
 
 export const LEAD = 30;         // s of settling-in before the first cat is due
@@ -15,7 +16,9 @@ const MIN_REPLACE = 15;         // s: the soonest a cat that wandered off can be
 
 export class Session {
   constructor() {
-    this.state = 'setup'; // setup → running → final → done (pause is the world's)
+    // setup → running → final → over → done (pause is the world's). `over` is time's up with the
+    // quiet rules still running, until the teacher ends the session (`done`).
+    this.state = 'setup';
     this.length = 15 * 60;
     this.curveLength = this.length; // the schedule keeps the length it started with
     this.elapsed = 0;
@@ -27,7 +30,8 @@ export class Session {
 
   get remaining() { return Math.max(0, this.length - this.elapsed); }
   get progress() { return clamp(this.elapsed / this.length, 0, 1); }
-  get active() { return this.state === 'running' || this.state === 'final'; }
+  get active() { return this.state === 'running' || this.state === 'final' || this.state === 'over'; }
+  get over() { return this.state === 'over'; }
 
   start(minutes, name) {
     this.length = clamp(Math.round(minutes), MIN_MINUTES, MAX_MINUTES) * 60;
@@ -69,8 +73,9 @@ export class Session {
   }
 
   extend(seconds) {
+    if (this.state === 'over') this.elapsed = this.length; // overtime doesn't eat the extra minutes
     this.length += seconds;
-    if (this.state === 'done' || this.state === 'final') this.state = this.remaining <= FINALE ? 'final' : 'running';
+    if (this.active) this.state = this.remaining <= FINALE ? 'final' : 'running';
     if (this.remaining > FINALE) this.minuteCued = false;
   }
 
@@ -86,9 +91,10 @@ export class Session {
     while (this.due.length && cats >= CATS) this.due.shift();
     if (calm && this.elapsed - this.lastArrival >= CATCH_UP_GAP) {
       if (this.due.length && this.due[0].t <= this.elapsed) out.arrive = true;
-      else if (this.state === 'final' && cats >= CATS && !toby) out.toby = true;
+      else if (this.state !== 'running' && cats >= CATS && !toby) out.toby = true;
     }
-    if (this.remaining <= 0) { this.state = 'done'; out.end = true; }
+    // Time's up, but the room carries on: cats still leave a noisy room and come back to a calm one.
+    if (this.remaining <= 0 && this.state !== 'over') { this.state = 'over'; out.end = true; }
     return out;
   }
 
@@ -99,4 +105,7 @@ export class Session {
   }
 
   tobyArrived() { this.lastArrival = this.elapsed; }
+
+  // The teacher ended the session.
+  finish() { this.state = 'done'; }
 }

@@ -1,4 +1,9 @@
-// Web Audio: microphone loudness meter, synthesised cat sounds and a gentle lo-fi loop.
+// Web Audio: microphone loudness meter, synthesised cat sounds and the background music track.
+
+const MUSIC_URL = 'assets/music/rainy-window-study.mp3';
+const MUSIC_VOL = 0.35;     // the track is mastered loud (about -15 LUFS); this sits it under the room
+const MUSIC_LOOP_AT = 175;  // seconds: the track's own fade-out starts here
+const MUSIC_XFADE = 2.5;    // seconds of overlap when it wraps back to the top
 
 export class AudioEngine {
   constructor() {
@@ -6,6 +11,7 @@ export class AudioEngine {
     this.level = 0;          // smoothed 0..1 loudness
     this.sensitivity = 2;
     this.catSounds = true;
+    this.warnSounds = true;
     this.musicOn = true;
     this.quietUntil = 0;     // mic readings are ignored while our own cat sounds play
   }
@@ -384,51 +390,46 @@ export class AudioEngine {
     o.start(t); o.stop(t + 0.16);
   }
 
-  // ---------------------------------------------------------------- lo-fi music
-  startMusic() {
+  // ---------------------------------------------------------------- background music
+  // "Rainy Window Study": a 3-minute track that fades out over its last few seconds, so rather
+  // than looping the whole file we crossfade back to the top just before that fade begins.
+  async startMusic() {
     this.init();
     if (this.music) return;
     const c = this.ctx;
     const bus = c.createGain();
-    bus.gain.value = this.musicOn ? 0.5 : 0;
-    const warm = c.createBiquadFilter();
-    warm.type = 'lowpass';
-    warm.frequency.value = 2200;
-    bus.connect(warm).connect(this.master);
-    warm.connect(this.reverb);
-    this.music = { bus, nextBar: c.currentTime + 0.3, bar: 0 };
-
-    // vinyl crackle + soft fire hiss
-    const hiss = c.createBufferSource();
-    hiss.buffer = this.makeCrackle(4);
-    hiss.loop = true;
-    const hg = c.createGain();
-    hg.gain.value = 0.25;
-    hiss.connect(hg).connect(bus);
-    hiss.start();
-
-    // wobbly tape: a slow LFO shared by every note's detune
-    this.wow = c.createOscillator();
-    this.wow.frequency.value = 0.35;
-    this.wowG = c.createGain();
-    this.wowG.gain.value = 9;
-    this.wow.connect(this.wowG);
-    this.wow.start();
-
-    this.scheduler = setInterval(() => this.schedule(), 200);
+    bus.gain.value = this.musicOn ? MUSIC_VOL * (this.musicLevel ?? 1) : 0;
+    bus.connect(this.master);
+    this.music = { bus, buffer: null, nextStart: 0 };
+    try {
+      const res = await fetch(MUSIC_URL);
+      this.music.buffer = await c.decodeAudioData(await res.arrayBuffer());
+    } catch (err) {
+      console.warn('Background music failed to load', err);
+      return;
+    }
+    this.music.nextStart = c.currentTime + 0.1;
+    this.queueMusic();
+    this.scheduler = setInterval(() => this.queueMusic(), 1000);
   }
 
-  makeCrackle(sec) {
+  // Keep one pass of the track queued ahead; each pass fades in over the previous one's tail.
+  queueMusic() {
     const c = this.ctx;
-    const buf = c.createBuffer(1, Math.floor(c.sampleRate * sec), c.sampleRate);
-    const d = buf.getChannelData(0);
-    let lp = 0;
-    for (let i = 0; i < d.length; i++) {
-      lp = lp * 0.97 + (Math.random() * 2 - 1) * 0.03;
-      d[i] = lp * 0.25;
-      if (Math.random() < 0.00025) d[i] += (Math.random() - 0.5) * 0.6;
-    }
-    return buf;
+    const m = this.music;
+    if (m.nextStart > c.currentTime + 5) return;
+    const t = m.nextStart;
+    const src = c.createBufferSource();
+    src.buffer = m.buffer;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(1, t + MUSIC_XFADE);
+    g.gain.setValueAtTime(1, t + MUSIC_LOOP_AT);
+    g.gain.linearRampToValueAtTime(0, t + MUSIC_LOOP_AT + MUSIC_XFADE);
+    src.connect(g).connect(m.bus);
+    src.start(t);
+    src.stop(t + MUSIC_LOOP_AT + MUSIC_XFADE + 0.05);
+    m.nextStart = t + MUSIC_LOOP_AT;
   }
 
   setMusic(on) {
@@ -444,7 +445,31 @@ export class AudioEngine {
   }
 
   applyMusic() {
-    if (this.music) this.music.bus.gain.setTargetAtTime(this.musicOn ? 0.5 * (this.musicLevel ?? 1) : 0, this.ctx.currentTime, 0.5);
+    if (this.music) this.music.bus.gain.setTargetAtTime(this.musicOn ? MUSIC_VOL * (this.musicLevel ?? 1) : 0, this.ctx.currentTime, 0.5);
+  }
+
+  // A cat is thinking of leaving: two soft, low, falling notes. Plain and a little flat, so it
+  // reads as "careful" and is nothing anyone would want to hear again.
+  warn() {
+    if (!this.ctx || !this.warnSounds) return;
+    const c = this.ctx;
+    const t0 = c.currentTime + 0.03;
+    this.hold(1.1);
+    [[67, 0], [63, 0.26]].forEach(([n, at]) => {
+      const t = t0 + at;
+      const o = c.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = 440 * Math.pow(2, (n - 69) / 12);
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1100;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.085, t + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      o.connect(lp).connect(g).connect(this.sfxBus);
+      o.start(t); o.stop(t + 0.75);
+    });
   }
 
   // Time's up: a soft rising bell, quieter than a meow.
@@ -467,123 +492,5 @@ export class AudioEngine {
         o.start(t); o.stop(t + dec + 0.05);
       }
     });
-  }
-
-  schedule() {
-    const c = this.ctx;
-    const m = this.music;
-    const beat = 60 / 68;
-    const barLen = beat * 4;
-    // Fmaj9 – Em7 – Dm9 – Cmaj7 (+ G6 turnaround)
-    const prog = [
-      [53, 57, 60, 64, 67], [52, 55, 59, 62, 66], [50, 53, 57, 60, 64], [48, 52, 55, 59, 62],
-      [53, 57, 60, 64, 69], [52, 55, 59, 62, 67], [50, 53, 57, 62, 65], [43, 50, 55, 59, 64],
-    ];
-    const bass = [41, 40, 38, 36, 41, 40, 38, 43];
-    const mel = [72, 74, 76, 79, 81, 79, 76, 74, 72, 69, 67];
-    while (m.nextBar < c.currentTime + 1.2) {
-      const t = m.nextBar;
-      const i = m.bar % prog.length;
-      prog[i].forEach((n, k) => this.keys(n, t + k * 0.018, barLen * 0.95, 0.032));
-      this.keys(prog[i][2] + 12, t + beat * 2.5, beat * 1.2, 0.012);
-      this.bass(bass[i], t, beat * 2.6);
-      this.bass(bass[i] + (i % 2 ? 7 : 12), t + beat * 2.5, beat * 1.3);
-      // a sparse, gentle melody
-      for (let b = 0; b < 4; b++) {
-        if (Math.random() < 0.35) {
-          const swing = b % 2 ? beat * 0.12 : 0;
-          const n = mel[Math.floor(Math.random() * mel.length)];
-          this.bell(n, t + b * beat + swing + (Math.random() < 0.5 ? beat / 2 : 0), beat * 1.5);
-        }
-      }
-      // brushed beat: soft kick + muted hat
-      for (let b = 0; b < 4; b++) {
-        if (b === 0 || b === 2.5 || (b === 2 && m.bar % 2)) this.kick(t + b * beat);
-        this.hat(t + b * beat + beat / 2 + beat * 0.08, 0.012);
-        if (b % 2 === 1) this.hat(t + b * beat, 0.02);
-      }
-      this.kick(t + beat * 2.5);
-      m.nextBar += barLen;
-      m.bar++;
-    }
-  }
-
-  freq(n) { return 440 * Math.pow(2, (n - 69) / 12); }
-
-  keys(n, t, d, vol) {
-    // Rhodes-ish: sine + quiet FM bell, slow release
-    const c = this.ctx;
-    const o = c.createOscillator();
-    o.type = 'sine';
-    o.frequency.value = this.freq(n);
-    this.wowG.connect(o.detune);
-    const mod = c.createOscillator();
-    mod.frequency.value = this.freq(n) * 2;
-    const mg = c.createGain();
-    mg.gain.setValueAtTime(this.freq(n) * 0.9, t);
-    mg.gain.exponentialRampToValueAtTime(1, t + 0.8);
-    mod.connect(mg).connect(o.frequency);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.02);
-    g.gain.exponentialRampToValueAtTime(vol * 0.4, t + 1.2);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.6);
-    o.connect(g).connect(this.music.bus);
-    o.start(t); mod.start(t);
-    o.stop(t + d + 0.7); mod.stop(t + d + 0.7);
-  }
-
-  bass(n, t, d) {
-    const c = this.ctx;
-    const o = c.createOscillator();
-    o.type = 'triangle';
-    o.frequency.value = this.freq(n - 12);
-    const lp = c.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 300;
-    const g = c.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.09, t + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    o.connect(lp).connect(g).connect(this.music.bus);
-    o.start(t); o.stop(t + d + 0.05);
-  }
-
-  bell(n, t, d) {
-    const c = this.ctx;
-    const o = c.createOscillator();
-    o.type = 'triangle';
-    o.frequency.value = this.freq(n);
-    this.wowG.connect(o.detune);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.022, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    o.connect(g).connect(this.music.bus);
-    o.start(t); o.stop(t + d + 0.05);
-  }
-
-  kick(t) {
-    const c = this.ctx;
-    const o = c.createOscillator();
-    o.frequency.setValueAtTime(90, t);
-    o.frequency.exponentialRampToValueAtTime(40, t + 0.18);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.12, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-    o.connect(g).connect(this.music.bus);
-    o.start(t); o.stop(t + 0.32);
-  }
-
-  hat(t, vol) {
-    const c = this.ctx;
-    const s = c.createBufferSource();
-    s.buffer = this.noiseBuf;
-    const hp = c.createBiquadFilter();
-    hp.type = 'highpass'; hp.frequency.value = 6000;
-    const g = c.createGain();
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
-    s.connect(hp).connect(g).connect(this.music.bus);
-    s.start(t, Math.random()); s.stop(t + 0.08);
   }
 }

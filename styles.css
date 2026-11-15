@@ -146,6 +146,13 @@ button.ghost { background: transparent; box-shadow: none; text-decoration: under
   transition: opacity 0.6s ease, transform 0.6s ease;
 }
 #minuteNote { top: 22px; left: 50%; transform: translateX(-50%); padding: 8px 22px; font-size: 20px; font-weight: 600; color: var(--accent-dark); }
+#timeUpNote {
+  position: absolute; z-index: 5; top: 22px; left: 50%; transform: translateX(-50%);
+  padding: 10px 26px; border-radius: 999px; font-size: 22px; font-weight: 600; color: var(--accent-dark);
+  background: rgba(255, 246, 230, 0.92); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.6s ease, transform 0.6s ease; white-space: nowrap;
+}
+#timeUpNote.hidden { opacity: 0; transform: translate(-50%, -8px); pointer-events: none; }
 #minuteNote.hidden { opacity: 0; transform: translate(-50%, -8px); pointer-events: none; }
 #activityTag { top: 20px; left: 20px; padding: 8px 20px; font-size: 19px; font-weight: 600; opacity: 0.9; }
 #activityTag.hidden { opacity: 0; pointer-events: none; }
@@ -221,6 +228,11 @@ button.ghost { background: transparent; box-shadow: none; text-decoration: under
 #nextCatLabel { font-size: 17px; font-weight: 600; min-width: 92px; }
 button.mini { padding: 6px 11px; font-size: 14px; font-weight: 600; }
 #hud.idle #nextCat button.mini { visibility: hidden; }
+/* End session appears once time is up; the ring (full by then) makes room for it */
+#endBtn { display: none; padding: 9px 18px; font-size: 16px; }
+#hud.over #endBtn { display: inline-block; }
+#hud.over #nextCatRing { display: none; }
+#hud.over #nextCatLabel { min-width: 0; }
 
 /* ---------- Settings ---------- */
 #settingsToggle {
@@ -259,6 +271,8 @@ button.mini { padding: 6px 11px; font-size: 14px; font-weight: 600; }
 #settings .buttons { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 #settings .buttons button { flex: 1; font-size: 15px; padding: 9px 12px; }
 #settings select { display: block; width: 100%; margin-top: 6px; padding: 8px 10px; font: inherit; font-size: 15px; border-radius: 12px; border: 2px solid rgba(59, 42, 34, 0.15); background: #fffaf2; color: var(--ink); }
+#settings #sceneNote { margin: -4px 0 8px; font-size: 13px; opacity: 0.7; }
+#settings #sceneNote.hidden { display: none; }
 #settings details { margin-top: 14px; font-size: 14px; opacity: 0.85; }
 #settings summary { cursor: pointer; }
 
