@@ -15,7 +15,7 @@ There are two scenes, chosen in the teacher controls: the **cosy library** at ni
 
 ## In class
 
-- **Start**: pick a length (5, 10, 15, 20 or 30 minutes, or any length from 5 to 90), optionally name the activity, and press Start or Enter. Every session starts with an empty room.
+- **Start**: pick a length (5, 10, 15, 20 or 30 minutes, or any length from 5 to 90), optionally name the activity, choose the library or the park, and press Start or Enter. The room behind the card changes as you pick, and your choice is remembered. Every session starts with an empty room.
 - **Time left** shows in the bar, in whole minutes, next to a ring that fills over the session.
 - **+1 / +5**: add time to a session that's going well, from the bar (also once time is up).
 - **End session**: appears in the bar when time is up. It ends the quiet time and shows who stayed.
@@ -35,7 +35,7 @@ Then open http://localhost:5173. The microphone needs `localhost` or https. You 
 
 The ⚙ button (top right) opens the teacher controls:
 
-- **Scene**: the cosy library or the sunny park. A change made during a session takes effect at the next one.
+- **Scene**: the cosy library or the sunny park (also on the setup card). A change made during a session takes effect at the next one.
 - **Noise limit**: where the marker sits on the volume bar.
 - **Mic sensitivity**: raise it if the bar barely moves, lower it if it's always high.
 - **How strict**: Gentle, Normal or Strict sets how long the room can stay noisy before a cat wanders off (6, 4 or 2.6 seconds). Cats look up after 1.5 seconds.

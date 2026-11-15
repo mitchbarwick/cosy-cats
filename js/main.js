@@ -71,9 +71,19 @@ function applyScene() {
   $('noiseLabel').textContent = copy.volume;
   $('introFill').textContent = copy.intro;
 }
-$('sceneSelect').value = settings.scene;
-$('sceneSelect').addEventListener('change', () => { settings.scene = $('sceneSelect').value; save(); applyScene(); });
-applyScene();
+// The scene can be picked on the setup card or in the teacher controls; both stay in step.
+// On the setup card the room behind it changes straight away, as a preview.
+const sceneChips = [...document.querySelectorAll('#scenes button')];
+function pickScene(kind) {
+  settings.scene = kind;
+  $('sceneSelect').value = kind;
+  sceneChips.forEach((b) => b.classList.toggle('on', b.dataset.scene === kind));
+  save();
+  applyScene();
+}
+sceneChips.forEach((b) => b.addEventListener('click', () => pickScene(b.dataset.scene)));
+$('sceneSelect').addEventListener('change', () => pickScene($('sceneSelect').value));
+pickScene(settings.scene);
 
 $('settingsToggle').addEventListener('click', () => $('settings').classList.toggle('hidden'));
 $('fullscreenBtn').addEventListener('click', () => {

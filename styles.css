@@ -276,6 +276,16 @@ button.mini { padding: 6px 11px; font-size: 14px; font-weight: 600; }
 #settings details { margin-top: 14px; font-size: 14px; opacity: 0.85; }
 #settings summary { cursor: pointer; }
 
+/* short screens (720p projectors): tighten the setup card so it never runs off the bottom */
+@media (max-height: 800px) {
+  .card { padding: 26px 40px 20px; }
+  .card h1 { font-size: 44px; margin-bottom: 6px; }
+  .card p { font-size: 17px; margin-bottom: 16px; }
+  .card .field { margin-bottom: 12px; }
+  .card label.check { margin: 0 0 14px; }
+  .card p.small { margin-top: 12px; }
+}
+
 @media (max-width: 760px) {
   #hud { flex-wrap: wrap; border-radius: 22px; gap: 10px; }
   #noiseLabel, #nextCatLabel { display: none; }
